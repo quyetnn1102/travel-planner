@@ -8,7 +8,7 @@ export async function POST(request: Request, context: DayContext) {
   const body = await readJson(request);
 
   try {
-    const activity = addActivity(dayId, body);
+    const activity = await addActivity(dayId, body);
     return activity ? ok(activity, { status: 201 }) : fail("NOT_FOUND", "Itinerary day not found.", 404);
   } catch (error) {
     return fail("BAD_REQUEST", error instanceof Error ? error.message : "Invalid activity payload.");

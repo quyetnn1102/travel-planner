@@ -5,7 +5,7 @@ type ShareContext = ParamsContext<{ shareToken: string }>;
 
 export async function GET(_request: Request, context: ShareContext) {
   const { shareToken } = await context.params;
-  const trip = getSharedTrip(shareToken);
+  const trip = await getSharedTrip(shareToken);
 
   return trip ? ok(trip) : fail("NOT_FOUND", "Shared trip not found.", 404);
 }

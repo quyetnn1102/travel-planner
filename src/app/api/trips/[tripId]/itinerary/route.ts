@@ -5,7 +5,7 @@ type TripContext = ParamsContext<{ tripId: string }>;
 
 export async function GET(_request: Request, context: TripContext) {
   const { tripId } = await context.params;
-  const itinerary = getItinerary(tripId);
+  const itinerary = await getItinerary(tripId);
 
   return itinerary ? ok(itinerary) : fail("NOT_FOUND", "Trip not found.", 404);
 }

@@ -5,12 +5,31 @@ Next.js travel planning MVP with trip management, itinerary blocks, cost trackin
 ## Run
 
 ```bash
+pnpm install
+pnpm db:generate
 pnpm dev
 ```
 
 Open http://localhost:3000.
 
 The dev script uses webpack (`next dev --webpack`) because Turbopack cache writes hit disk-space limits in this workspace.
+
+## Database
+
+The Prisma schema targets PostgreSQL. Set `DATABASE_URL` in `.env`, then run:
+
+```bash
+pnpm db:validate
+pnpm db:migrate
+pnpm db:seed
+```
+
+For hosted deploys, create a PostgreSQL database first and set `DATABASE_URL` in the hosting provider. Deployment should run:
+
+```bash
+pnpm db:deploy
+pnpm build
+```
 
 ## Partner Links
 
