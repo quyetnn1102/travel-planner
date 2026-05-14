@@ -31,6 +31,8 @@ pnpm db:deploy
 pnpm build
 ```
 
+On Vercel with the Supabase integration, the app also accepts `POSTGRE_SQL_POSTGRES_PRISMA_URL`, `POSTGRES_PRISMA_URL`, or `POSTGRES_URL` when `DATABASE_URL` is not present. The Vercel build command is configured in `vercel.json` to run migrations before `pnpm build`.
+
 ## Partner Links
 
 The booking tab generates outbound hotel searches for Booking.com and Agoda using the selected trip destination, dates, and traveler count.

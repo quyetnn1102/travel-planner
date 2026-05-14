@@ -8,7 +8,7 @@ try {
   // Seed can also run in hosted environments where DATABASE_URL is already set.
 }
 
-const connectionString = process.env.DATABASE_URL;
+const connectionString = getDatabaseUrl();
 
 if (!connectionString) {
   throw new Error("DATABASE_URL is required to seed the database.");
@@ -119,3 +119,13 @@ await prisma.$transaction(async (tx) => {
 });
 
 await prisma.$disconnect();
+
+function getDatabaseUrl() {
+  return (
+    process.env.DATABASE_URL ??
+    process.env.POSTGRE_SQL_POSTGRES_PRISMA_URL ??
+    process.env.POSTGRES_PRISMA_URL ??
+    process.env.POSTGRES_URL ??
+    ""
+  );
+}
