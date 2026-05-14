@@ -1,6 +1,22 @@
 import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { loadEnvFile } from "node:process";
 
-const prisma = new PrismaClient();
+try {
+  loadEnvFile(".env");
+} catch {
+  // Seed can also run in hosted environments where DATABASE_URL is already set.
+}
+
+const connectionString = process.env.DATABASE_URL;
+
+if (!connectionString) {
+  throw new Error("DATABASE_URL is required to seed the database.");
+}
+
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString }),
+});
 
 const devUser = {
   id: "dev-user",
