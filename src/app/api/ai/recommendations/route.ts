@@ -1,5 +1,5 @@
 import { fail, ok, readJson } from "@/server/api-response";
-import { toClientErrorMessage, ValidationError } from "@/server/errors";
+import { ValidationError } from "@/server/errors";
 import { getTrip } from "@/server/travel-store";
 import { z } from "zod";
 
@@ -177,7 +177,7 @@ function getOpenAIClientMessage(status: number, upstreamMessage?: string) {
     return `OpenAI rejected the request: ${upstreamMessage}`;
   }
 
-  return "Unable to generate AI recommendations.";
+  return `OpenAI request failed with status ${status}${upstreamMessage ? `: ${upstreamMessage}` : "."}`;
 }
 
 function getAiClientErrorMessage(error: unknown) {
@@ -193,7 +193,7 @@ function getAiClientErrorMessage(error: unknown) {
     return `AI recommendation failed: ${truncateMessage(error.message)}`;
   }
 
-  return toClientErrorMessage(error, "Unable to generate AI recommendations.");
+  return `AI recommendation failed with an unknown server error: ${truncateMessage(String(error))}`;
 }
 
 function stripJsonCodeFence(text: string) {
