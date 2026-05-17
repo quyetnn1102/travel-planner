@@ -5,6 +5,7 @@ export type ApiErrorCode =
   | "NOT_FOUND"
   | "FORBIDDEN"
   | "METHOD_NOT_ALLOWED"
+  | "SERVICE_UNAVAILABLE"
   | "INTERNAL_ERROR";
 
 export type ApiResult<T> = {

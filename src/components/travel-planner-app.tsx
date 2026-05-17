@@ -18,6 +18,7 @@ import {
   travelStyles,
 } from "@/lib/travel";
 import { travelApi } from "@/lib/api";
+import type { AiRecommendation } from "@/lib/ai-recommendations";
 import { buildPartnerLinks } from "@/lib/integrations";
 import {
   Locale,
@@ -93,6 +94,11 @@ export function TravelPlannerApp() {
   const [isEditingTrip, setIsEditingTrip] = useState(false);
   const [isLoadingTrips, setIsLoadingTrips] = useState(true);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [aiRecommendationsByTrip, setAiRecommendationsByTrip] = useState<{
+    tripId: string;
+    recommendations: AiRecommendation[];
+  } | null>(null);
+  const [generatingRecommendationsForTripId, setGeneratingRecommendationsForTripId] = useState<string | null>(null);
   const [locale, setLocale] = useState<Locale>("vi");
   const text = uiText[locale];
 
@@ -143,6 +149,11 @@ export function TravelPlannerApp() {
 
   const summary = selectedTrip ? calculateCostSummary(selectedTrip) : null;
   const completedChecklist = selectedTrip?.checklistItems.filter((item) => item.isDone).length ?? 0;
+  const aiRecommendations =
+    aiRecommendationsByTrip && selectedTrip && aiRecommendationsByTrip.tripId === selectedTrip.id
+      ? aiRecommendationsByTrip.recommendations
+      : [];
+  const isGeneratingRecommendations = generatingRecommendationsForTripId === selectedTrip?.id;
 
   function replaceTrip(nextTrip: Trip) {
     setTrips((currentTrips) => currentTrips.map((trip) => (trip.id === nextTrip.id ? nextTrip : trip)));
@@ -402,6 +413,21 @@ export function TravelPlannerApp() {
     });
   }
 
+  function generateRecommendations() {
+    if (!selectedTrip) {
+      return;
+    }
+
+    const tripId = selectedTrip.id;
+    setGeneratingRecommendationsForTripId(tripId);
+    void runMutation(async () => {
+      const result = await travelApi.getAiRecommendations(tripId);
+      setAiRecommendationsByTrip({ tripId, recommendations: result.recommendations });
+    }).finally(() => {
+      setGeneratingRecommendationsForTripId((currentTripId) => (currentTripId === tripId ? null : currentTripId));
+    });
+  }
+
   return (
     <main className="min-h-screen bg-[#f4f1e8] text-[#17211b]">
       <TopNavigation locale={locale} onLocaleChange={setLocale} />
@@ -502,6 +528,13 @@ export function TravelPlannerApp() {
             ) : null}
 
             <Tabs activeTab={activeTab} locale={locale} onChange={setActiveTab} />
+
+            <AiRecommendationsPanel
+              recommendations={aiRecommendations}
+              isLoading={isGeneratingRecommendations}
+              locale={locale}
+              onGenerate={generateRecommendations}
+            />
 
             {activeTab === "itinerary" && activeDay ? (
               <ItineraryPanel
@@ -941,6 +974,57 @@ function Tabs({ activeTab, locale, onChange }: { activeTab: Tab; locale: Locale;
         </button>
       ))}
     </nav>
+  );
+}
+
+function AiRecommendationsPanel({
+  recommendations,
+  isLoading,
+  locale,
+  onGenerate,
+}: {
+  recommendations: AiRecommendation[];
+  isLoading: boolean;
+  locale: Locale;
+  onGenerate: () => void;
+}) {
+  const isVietnamese = locale === "vi";
+
+  return (
+    <section className="rounded-lg border border-[#d8cfbd] bg-[#fffdf8] p-4 shadow-sm">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="text-xs font-bold uppercase text-[#756f65]">
+            {isVietnamese ? "AI gợi ý" : "AI recommendations"}
+          </p>
+          <h3 className="mt-1 text-lg font-extrabold">
+            {isVietnamese ? "Nhận gợi ý tối ưu lịch trình" : "Get trip optimization ideas"}
+          </h3>
+        </div>
+        <button
+          type="button"
+          onClick={onGenerate}
+          disabled={isLoading}
+          className="rounded-lg bg-[#17211b] px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {isLoading ? (isVietnamese ? "Đang tạo..." : "Generating...") : isVietnamese ? "Tạo gợi ý" : "Generate"}
+        </button>
+      </div>
+
+      {recommendations.length > 0 ? (
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          {recommendations.map((item) => (
+            <article key={`${item.priority}-${item.title}`} className="rounded-lg border border-[#eee5d3] bg-white p-3">
+              <span className="rounded-full bg-[#f1eadb] px-2 py-1 text-[11px] font-bold uppercase text-[#574f42]">
+                {item.priority}
+              </span>
+              <h4 className="mt-3 text-sm font-extrabold text-[#17211b]">{item.title}</h4>
+              <p className="mt-2 text-sm leading-5 text-[#615f57]">{item.rationale}</p>
+            </article>
+          ))}
+        </div>
+      ) : null}
+    </section>
   );
 }
 

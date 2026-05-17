@@ -8,6 +8,8 @@ import type {
   TripDraft,
   TripShare,
 } from "@/lib/travel";
+import type { PublicTrip } from "@/lib/public-trip";
+import type { AiRecommendationsResponse } from "@/lib/ai-recommendations";
 
 type ApiResult<T> = {
   data: T;
@@ -141,5 +143,10 @@ export const travelApi = {
       method: "PATCH",
       body: jsonBody({ isEnabled }),
     }),
-  getSharedTrip: (shareToken: string) => request<Trip>(`/api/shared/${shareToken}`),
+  getSharedTrip: (shareToken: string) => request<PublicTrip>(`/api/shared/${shareToken}`),
+  getAiRecommendations: (tripId: string) =>
+    request<AiRecommendationsResponse>("/api/ai/recommendations", {
+      method: "POST",
+      body: jsonBody({ tripId }),
+    }),
 };

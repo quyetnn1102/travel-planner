@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { PublicTrip } from "@/lib/public-trip";
 import {
-  Trip,
-  calculateCostSummary,
   costCategories,
   formatCurrency,
   formatDate,
@@ -12,7 +11,7 @@ import {
 import { travelApi } from "@/lib/api";
 
 export function SharedTripPage({ shareToken }: { shareToken: string }) {
-  const [trip, setTrip] = useState<Trip | null>(null);
+  const [trip, setTrip] = useState<PublicTrip | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -64,7 +63,7 @@ export function SharedTripPage({ shareToken }: { shareToken: string }) {
     );
   }
 
-  const summary = calculateCostSummary(trip);
+  const summary = calculatePublicCostSummary(trip);
 
   return (
     <main className="min-h-screen bg-[#f4f1e8] text-[#17211b]">
@@ -92,7 +91,7 @@ export function SharedTripPage({ shareToken }: { shareToken: string }) {
           <h2 className="text-2xl font-extrabold">Lịch trình</h2>
           <div className="mt-4 space-y-4">
             {trip.itineraryDays.map((day) => (
-              <article key={day.id} className="rounded-lg border border-[#e3dac8] bg-[#fffdf8] p-4 shadow-sm">
+              <article key={`${day.date}-${day.dayNumber}`} className="rounded-lg border border-[#e3dac8] bg-[#fffdf8] p-4 shadow-sm">
                 <div className="flex flex-col gap-1 border-b border-[#eee5d3] pb-3 sm:flex-row sm:items-center sm:justify-between">
                   <h3 className="text-lg font-bold">{day.title}</h3>
                   <p className="text-sm font-semibold text-[#6d675c]">{formatDate(day.date)}</p>
@@ -109,7 +108,7 @@ export function SharedTripPage({ shareToken }: { shareToken: string }) {
                         <div className="mt-3 space-y-2">
                           {activities.length > 0 ? (
                             activities.map((activity) => (
-                              <div key={activity.id} className="rounded-lg border border-[#eee5d3] bg-[#fffdf8] p-3">
+                                <div key={`${activity.timeBlock}-${activity.title}-${activity.sortOrder}`} className="rounded-lg border border-[#eee5d3] bg-[#fffdf8] p-3">
                                 <p className="text-sm font-bold">{activity.title}</p>
                                 <p className="mt-1 text-xs font-semibold text-[#756f65]">
                                   {[activity.startTime, activity.endTime].filter(Boolean).join(" - ") || "Chưa có giờ"}
@@ -139,7 +138,7 @@ export function SharedTripPage({ shareToken }: { shareToken: string }) {
               {trip.costItems.length > 0 ? (
                 trip.costItems.map((item) => (
                   <div
-                    key={item.id}
+                    key={`${item.category}-${item.name}`}
                     className="flex items-center justify-between gap-4 border-b border-[#eee5d3] px-4 py-3 last:border-b-0"
                   >
                     <div>
@@ -160,7 +159,7 @@ export function SharedTripPage({ shareToken }: { shareToken: string }) {
             <div className="mt-4 overflow-hidden rounded-lg border border-[#e3dac8] bg-[#fffdf8] shadow-sm">
               {trip.checklistItems.map((item) => (
                 <div
-                  key={item.id}
+                  key={`${item.category}-${item.title}`}
                   className="flex items-center gap-3 border-b border-[#eee5d3] px-4 py-3 last:border-b-0"
                 >
                   <span
@@ -194,4 +193,14 @@ function ReadOnlyMetric({ label, value }: { label: string; value: string }) {
 
 function getCostCategoryLabel(category: string) {
   return costCategories.find((item) => item.value === category)?.label ?? category;
+}
+
+function calculatePublicCostSummary(trip: PublicTrip) {
+  const total = trip.costItems.reduce((sum, item) => sum + item.amount * Math.max(1, item.quantity), 0);
+  const travelerCount = Math.max(1, trip.adultCount + trip.childCount);
+
+  return {
+    total,
+    perPerson: Math.round(total / travelerCount),
+  };
 }
