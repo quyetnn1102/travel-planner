@@ -103,7 +103,7 @@ export async function POST(request: Request) {
       }),
     });
 
-    const payload = (await response.json()) as OpenAIResponse;
+    const payload = await readOpenAIResponse(response);
 
     if (!response.ok) {
       console.error("OpenAI recommendations request failed", {
@@ -185,6 +185,14 @@ function getAiClientErrorMessage(error: unknown) {
     return "OpenAI returned a response that was not valid JSON.";
   }
 
+  if (error instanceof ValidationError) {
+    return error.message;
+  }
+
+  if (error instanceof Error) {
+    return `AI recommendation failed: ${truncateMessage(error.message)}`;
+  }
+
   return toClientErrorMessage(error, "Unable to generate AI recommendations.");
 }
 
@@ -193,4 +201,26 @@ function stripJsonCodeFence(text: string) {
     .trim()
     .replace(/^```(?:json)?\s*/i, "")
     .replace(/\s*```$/i, "");
+}
+
+async function readOpenAIResponse(response: Response): Promise<OpenAIResponse> {
+  const text = await response.text();
+
+  if (!text) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(text) as OpenAIResponse;
+  } catch {
+    return {
+      error: {
+        message: truncateMessage(text),
+      },
+    };
+  }
+}
+
+function truncateMessage(message: string) {
+  return message.length > 240 ? `${message.slice(0, 240)}...` : message;
 }
