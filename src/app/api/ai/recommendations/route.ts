@@ -76,7 +76,7 @@ export async function POST(request: Request) {
             type: "json_object",
           },
         },
-        input: JSON.stringify({
+        input: `Generate JSON recommendations for this trip:\n${JSON.stringify({
           title: trip.title,
           destination: trip.destination,
           startDate: trip.startDate,
@@ -99,7 +99,7 @@ export async function POST(request: Request) {
             amount: item.amount,
             quantity: item.quantity,
           })),
-        }),
+        })}`,
       }),
     });
 
