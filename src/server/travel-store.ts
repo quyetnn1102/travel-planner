@@ -4,15 +4,27 @@ import type * as prismaStore from "@/server/prisma-travel-store";
 type StoreModule = typeof memoryStore | typeof prismaStore;
 
 async function activeStore(): Promise<StoreModule> {
-  if (process.env.DATABASE_URL) {
+  if (getRuntimeDatabaseUrl()) {
     return import("@/server/prisma-travel-store");
   }
 
   if (process.env.NODE_ENV === "production") {
-    throw new Error("DATABASE_URL is required in production.");
+    throw new Error("A database URL is required in production.");
   }
 
   return memoryStore;
+}
+
+function getRuntimeDatabaseUrl() {
+  return (
+    process.env.DATABASE_URL ??
+    process.env.POSTGRE_SQL_POSTGRES_PRISMA_URL ??
+    process.env.POSTGRES_PRISMA_URL ??
+    process.env.POSTGRES_URL ??
+    process.env.POSTGRE_SQL_POSTGRES_URL_NON_POOLING ??
+    process.env.POSTGRES_URL_NON_POOLING ??
+    ""
+  );
 }
 
 export async function listTrips() {
