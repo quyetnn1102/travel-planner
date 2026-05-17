@@ -12,7 +12,7 @@ if (!connectionString) {
 }
 
 const adapter = new PrismaPg({
-  connectionString,
+  connectionString: toNoVerifySslUrl(connectionString),
   ssl: { rejectUnauthorized: false },
 });
 
@@ -32,4 +32,10 @@ function getDatabaseUrl() {
     process.env.POSTGRES_URL_NON_POOLING ??
     ""
   );
+}
+
+function toNoVerifySslUrl(connectionString: string) {
+  const url = new URL(connectionString);
+  url.searchParams.set("sslmode", "no-verify");
+  return url.toString();
 }
