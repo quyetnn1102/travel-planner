@@ -14,6 +14,11 @@ type OpenAIResponse = {
       text?: string;
     }>;
   }>;
+  error?: {
+    code?: string;
+    message?: string;
+    type?: string;
+  };
 };
 
 const recommendationsSchema = z.object({
@@ -44,8 +49,9 @@ export async function POST(request: Request) {
     }
 
     const apiKey = process.env.OPENAI_API_KEY;
+    const normalizedApiKey = apiKey?.trim().replace(/^["']|["']$/g, "");
 
-    if (!apiKey) {
+    if (!normalizedApiKey) {
       return fail(
         "SERVICE_UNAVAILABLE",
         "AI recommendations are not configured. Set OPENAI_API_KEY in the server environment.",
@@ -56,7 +62,7 @@ export async function POST(request: Request) {
     const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        Authorization: `Bearer ${normalizedApiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -75,8 +81,6 @@ export async function POST(request: Request) {
               properties: {
                 recommendations: {
                   type: "array",
-                  minItems: 1,
-                  maxItems: 3,
                   items: {
                     type: "object",
                     additionalProperties: false,
@@ -123,7 +127,18 @@ export async function POST(request: Request) {
     const payload = (await response.json()) as OpenAIResponse;
 
     if (!response.ok) {
-      throw new Error("AI recommendation request failed.");
+      console.error("OpenAI recommendations request failed", {
+        status: response.status,
+        code: payload.error?.code,
+        type: payload.error?.type,
+        message: payload.error?.message,
+      });
+
+      return fail(
+        response.status === 401 ? "FORBIDDEN" : "BAD_REQUEST",
+        getOpenAIClientMessage(response.status, payload.error?.message),
+        response.status === 401 || response.status === 429 ? response.status : 400,
+      );
     }
 
     const text = payload.output_text ?? payload.output?.flatMap((item) => item.content ?? []).find((item) => item.text)?.text;
@@ -138,4 +153,20 @@ export async function POST(request: Request) {
 function parseRecommendations(text: string) {
   const parsed = JSON.parse(text) as unknown;
   return recommendationsSchema.parse(parsed);
+}
+
+function getOpenAIClientMessage(status: number, upstreamMessage?: string) {
+  if (status === 401) {
+    return "OpenAI rejected the API key. Check OPENAI_API_KEY in Vercel.";
+  }
+
+  if (status === 429) {
+    return "OpenAI rate limit or quota was reached. Check your OpenAI billing and usage limits.";
+  }
+
+  if (status === 400 && upstreamMessage) {
+    return `OpenAI rejected the request: ${upstreamMessage}`;
+  }
+
+  return "Unable to generate AI recommendations.";
 }
