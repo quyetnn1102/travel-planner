@@ -7,21 +7,6 @@ type RecommendationRequest = {
   tripId?: string;
 };
 
-type OpenAIResponse = {
-  output_text?: string;
-  output?: Array<{
-    content?: Array<{
-      output_text?: string;
-      text?: string;
-    }>;
-  }>;
-  error?: {
-    code?: string;
-    message?: string;
-    type?: string;
-  };
-};
-
 const recommendationsSchema = z.object({
   recommendations: z
     .array(
@@ -49,73 +34,75 @@ export async function POST(request: Request) {
       return fail("NOT_FOUND", "Trip not found.", 404);
     }
 
-    const apiKey = process.env.OPENAI_API_KEY;
-    const normalizedApiKey = apiKey?.trim().replace(/^["']|["']$/g, "");
+    const apiKey = process.env.ANTHROPIC_API_KEY?.trim().replace(/^["']|["']$/g, "");
 
-    if (!normalizedApiKey) {
+    if (!apiKey) {
       return fail(
         "SERVICE_UNAVAILABLE",
-        "AI recommendations are not configured. Set OPENAI_API_KEY in the server environment.",
+        "AI recommendations are not configured. Set ANTHROPIC_API_KEY in the server environment.",
         503,
       );
     }
 
-    const response = await fetch("https://api.openai.com/v1/responses", {
+    const model = process.env.ANTHROPIC_MODEL ?? "claude-haiku-4-5-20251001";
+
+    const baseUrl = process.env.ANTHROPIC_BASE_URL ?? "https://api.anthropic.com/v1";
+    const response = await fetch(`${baseUrl}/messages`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${normalizedApiKey}`,
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: process.env.OPENAI_MODEL ?? "gpt-5-mini",
-        max_output_tokens: 800,
-        instructions:
-          "You are a practical travel planner for Vietnamese travelers. Return only JSON with this exact shape: {\"recommendations\":[{\"title\":\"...\",\"rationale\":\"...\",\"priority\":\"high|medium|low\"}]}. Return 1 to 3 concise, actionable recommendations.",
-        text: {
-          format: {
-            type: "json_object",
+        model,
+        max_tokens: 800,
+        system:
+          'You are a practical travel planner for Vietnamese travelers. Return only valid JSON with this exact shape: {"recommendations":[{"title":"...","rationale":"...","priority":"high|medium|low"}]}. Provide 1 to 3 concise, actionable recommendations. Do not include any other text.',
+        messages: [
+          {
+            role: "user",
+            content: `Generate JSON recommendations for this trip:\n${JSON.stringify({
+              title: trip.title,
+              destination: trip.destination,
+              startDate: trip.startDate,
+              endDate: trip.endDate,
+              travelers: trip.adultCount + trip.childCount,
+              budgetAmount: trip.budgetAmount,
+              travelStyles: trip.travelStyles,
+              days: trip.itineraryDays.map((day) => ({
+                date: day.date,
+                activityCount: day.activities.length,
+                activities: day.activities.map((activity) => ({
+                  timeBlock: activity.timeBlock,
+                  title: activity.title,
+                  locationName: activity.locationName,
+                })),
+              })),
+              costs: trip.costItems.map((item) => ({
+                category: item.category,
+                name: item.name,
+                amount: item.amount,
+                quantity: item.quantity,
+              })),
+            })}`,
           },
-        },
-        input: `Generate JSON recommendations for this trip:\n${JSON.stringify({
-          title: trip.title,
-          destination: trip.destination,
-          startDate: trip.startDate,
-          endDate: trip.endDate,
-          travelers: trip.adultCount + trip.childCount,
-          budgetAmount: trip.budgetAmount,
-          travelStyles: trip.travelStyles,
-          days: trip.itineraryDays.map((day) => ({
-            date: day.date,
-            activityCount: day.activities.length,
-            activities: day.activities.map((activity) => ({
-              timeBlock: activity.timeBlock,
-              title: activity.title,
-              locationName: activity.locationName,
-            })),
-          })),
-          costs: trip.costItems.map((item) => ({
-            category: item.category,
-            name: item.name,
-            amount: item.amount,
-            quantity: item.quantity,
-          })),
-        })}`,
+        ],
       }),
     });
 
-    const payload = await readOpenAIResponse(response);
+    const payload = await readAnthropicResponse(response);
 
     if (!response.ok) {
-      console.error("OpenAI recommendations request failed", {
+      console.error("Anthropic recommendations request failed", {
         status: response.status,
-        code: payload.error?.code,
-        type: payload.error?.type,
+        errorType: payload.error?.type,
         message: payload.error?.message,
       });
 
       return fail(
         response.status === 401 ? "FORBIDDEN" : "BAD_REQUEST",
-        getOpenAIClientMessage(response.status, payload.error?.message),
+        getAnthropicClientMessage(response.status, payload.error?.message),
         response.status === 401 || response.status === 429 ? response.status : 400,
       );
     }
@@ -123,11 +110,8 @@ export async function POST(request: Request) {
     const text = getOutputText(payload);
 
     if (!text) {
-      console.error("OpenAI recommendations response did not include output text", {
-        outputItems: payload.output?.length ?? 0,
-      });
-
-      return fail("BAD_REQUEST", "OpenAI returned an empty recommendation response.", 400);
+      console.error("Anthropic recommendations response did not include output text");
+      return fail("BAD_REQUEST", "Anthropic returned an empty recommendation response.", 400);
     }
 
     const parsed = parseRecommendations(text);
@@ -142,6 +126,18 @@ export async function POST(request: Request) {
   }
 }
 
+type AnthropicContentBlock =
+  | { type: "text"; text: string }
+  | { type: string; [key: string]: unknown };
+
+type AnthropicResponse = {
+  content?: AnthropicContentBlock[];
+  error?: {
+    type?: string;
+    message?: string;
+  };
+};
+
 function parseRecommendations(text: string) {
   const parsed = JSON.parse(stripJsonCodeFence(text)) as unknown;
   const result = recommendationsSchema.safeParse(parsed);
@@ -153,36 +149,32 @@ function parseRecommendations(text: string) {
   return result.data;
 }
 
-function getOutputText(payload: OpenAIResponse) {
-  if (payload.output_text) {
-    return payload.output_text;
-  }
-
-  return payload.output
-    ?.flatMap((item) => item.content ?? [])
-    .map((item) => item.text ?? item.output_text)
-    .find((text) => typeof text === "string" && text.trim().length > 0);
+function getOutputText(payload: AnthropicResponse) {
+  return payload.content
+    ?.filter((block): block is { type: "text"; text: string } => block.type === "text")
+    .map((block) => block.text)
+    .find((text) => text.trim().length > 0);
 }
 
-function getOpenAIClientMessage(status: number, upstreamMessage?: string) {
+function getAnthropicClientMessage(status: number, upstreamMessage?: string) {
   if (status === 401) {
-    return "OpenAI rejected the API key. Check OPENAI_API_KEY in Vercel.";
+    return "Anthropic rejected the API key. Check ANTHROPIC_API_KEY in Vercel.";
   }
 
   if (status === 429) {
-    return "OpenAI rate limit or quota was reached. Check your OpenAI billing and usage limits.";
+    return "Anthropic rate limit was reached. Check your Anthropic billing and usage limits.";
   }
 
   if (status === 400 && upstreamMessage) {
-    return `OpenAI rejected the request: ${upstreamMessage}`;
+    return `Anthropic rejected the request: ${upstreamMessage}`;
   }
 
-  return `OpenAI request failed with status ${status}${upstreamMessage ? `: ${upstreamMessage}` : "."}`;
+  return `Anthropic request failed with status ${status}${upstreamMessage ? `: ${upstreamMessage}` : "."}`;
 }
 
 function getAiClientErrorMessage(error: unknown) {
   if (error instanceof SyntaxError) {
-    return "OpenAI returned a response that was not valid JSON.";
+    return "Anthropic returned a response that was not valid JSON.";
   }
 
   if (error instanceof ValidationError) {
@@ -203,7 +195,7 @@ function stripJsonCodeFence(text: string) {
     .replace(/\s*```$/i, "");
 }
 
-async function readOpenAIResponse(response: Response): Promise<OpenAIResponse> {
+async function readAnthropicResponse(response: Response): Promise<AnthropicResponse> {
   const text = await response.text();
 
   if (!text) {
@@ -211,7 +203,7 @@ async function readOpenAIResponse(response: Response): Promise<OpenAIResponse> {
   }
 
   try {
-    return JSON.parse(text) as OpenAIResponse;
+    return JSON.parse(text) as AnthropicResponse;
   } catch {
     return {
       error: {
