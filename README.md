@@ -31,7 +31,7 @@ pnpm db:deploy
 pnpm build
 ```
 
-On Vercel with the Supabase integration, migrations and seed data prefer `POSTGRE_SQL_POSTGRES_URL_NON_POOLING` or `POSTGRES_URL_NON_POOLING` when present, while runtime database calls use the pooled app URL from `DATABASE_URL`, `POSTGRE_SQL_POSTGRES_PRISMA_URL`, `POSTGRES_PRISMA_URL`, or `POSTGRES_URL`. The Vercel build command is configured in `vercel.json` to run migrations and seed demo data before `pnpm build`.
+On Vercel with the Supabase integration, migrations prefer `POSTGRE_SQL_POSTGRES_URL_NON_POOLING` or `POSTGRES_URL_NON_POOLING` when present, while runtime database calls use the pooled app URL from `DATABASE_URL`, `POSTGRE_SQL_POSTGRES_PRISMA_URL`, `POSTGRES_PRISMA_URL`, or `POSTGRES_URL`. The Vercel build command is configured in `vercel.json` to run migrations before `pnpm build`; demo data is inserted by an idempotent SQL migration.
 
 ## Partner Links
 
