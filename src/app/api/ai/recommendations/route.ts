@@ -11,6 +11,7 @@ type OpenAIResponse = {
   output_text?: string;
   output?: Array<{
     content?: Array<{
+      output_text?: string;
       text?: string;
     }>;
   }>;
@@ -69,32 +70,10 @@ export async function POST(request: Request) {
         model: process.env.OPENAI_MODEL ?? "gpt-5-mini",
         max_output_tokens: 800,
         instructions:
-          "You are a practical travel planner for Vietnamese travelers. Give concise, actionable recommendations.",
+          "You are a practical travel planner for Vietnamese travelers. Return only JSON with this exact shape: {\"recommendations\":[{\"title\":\"...\",\"rationale\":\"...\",\"priority\":\"high|medium|low\"}]}. Return 1 to 3 concise, actionable recommendations.",
         text: {
           format: {
-            type: "json_schema",
-            name: "trip_recommendations",
-            strict: true,
-            schema: {
-              type: "object",
-              additionalProperties: false,
-              properties: {
-                recommendations: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    additionalProperties: false,
-                    properties: {
-                      title: { type: "string" },
-                      rationale: { type: "string" },
-                      priority: { type: "string", enum: ["high", "medium", "low"] },
-                    },
-                    required: ["title", "rationale", "priority"],
-                  },
-                },
-              },
-              required: ["recommendations"],
-            },
+            type: "json_object",
           },
         },
         input: JSON.stringify({
@@ -141,18 +120,48 @@ export async function POST(request: Request) {
       );
     }
 
-    const text = payload.output_text ?? payload.output?.flatMap((item) => item.content ?? []).find((item) => item.text)?.text;
-    const parsed = parseRecommendations(text ?? "");
+    const text = getOutputText(payload);
+
+    if (!text) {
+      console.error("OpenAI recommendations response did not include output text", {
+        outputItems: payload.output?.length ?? 0,
+      });
+
+      return fail("BAD_REQUEST", "OpenAI returned an empty recommendation response.", 400);
+    }
+
+    const parsed = parseRecommendations(text);
 
     return ok(parsed);
   } catch (error) {
-    return fail("BAD_REQUEST", toClientErrorMessage(error, "Unable to generate AI recommendations."));
+    console.error("AI recommendations route failed", {
+      message: error instanceof Error ? error.message : String(error),
+    });
+
+    return fail("BAD_REQUEST", getAiClientErrorMessage(error));
   }
 }
 
 function parseRecommendations(text: string) {
-  const parsed = JSON.parse(text) as unknown;
-  return recommendationsSchema.parse(parsed);
+  const parsed = JSON.parse(stripJsonCodeFence(text)) as unknown;
+  const result = recommendationsSchema.safeParse(parsed);
+
+  if (!result.success) {
+    throw new ValidationError(result.error.issues[0]?.message ?? "AI response did not match the expected format.");
+  }
+
+  return result.data;
+}
+
+function getOutputText(payload: OpenAIResponse) {
+  if (payload.output_text) {
+    return payload.output_text;
+  }
+
+  return payload.output
+    ?.flatMap((item) => item.content ?? [])
+    .map((item) => item.text ?? item.output_text)
+    .find((text) => typeof text === "string" && text.trim().length > 0);
 }
 
 function getOpenAIClientMessage(status: number, upstreamMessage?: string) {
@@ -169,4 +178,19 @@ function getOpenAIClientMessage(status: number, upstreamMessage?: string) {
   }
 
   return "Unable to generate AI recommendations.";
+}
+
+function getAiClientErrorMessage(error: unknown) {
+  if (error instanceof SyntaxError) {
+    return "OpenAI returned a response that was not valid JSON.";
+  }
+
+  return toClientErrorMessage(error, "Unable to generate AI recommendations.");
+}
+
+function stripJsonCodeFence(text: string) {
+  return text
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "");
 }
