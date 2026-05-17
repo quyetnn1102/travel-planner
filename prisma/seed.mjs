@@ -15,7 +15,10 @@ if (!connectionString) {
 }
 
 const prisma = new PrismaClient({
-  adapter: new PrismaPg({ connectionString }),
+  adapter: new PrismaPg({
+    connectionString,
+    ssl: { rejectUnauthorized: false },
+  }),
 });
 
 const devUser = {
