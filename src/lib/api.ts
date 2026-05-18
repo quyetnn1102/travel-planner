@@ -47,6 +47,13 @@ type ChecklistPayload = {
   category?: string;
 };
 
+export type CurrentUser = {
+  id: string;
+  name: string | null;
+  email: string | null;
+  authMode: "authjs" | "development-stub";
+};
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     cache: "no-store",
@@ -71,6 +78,7 @@ function jsonBody(value: unknown) {
 }
 
 export const travelApi = {
+  getCurrentUser: () => request<CurrentUser | null>("/api/auth/me"),
   listTrips: () => request<Trip[]>("/api/trips"),
   getTrip: (tripId: string) => request<Trip>(`/api/trips/${tripId}`),
   createTrip: (draft: TripDraft) =>

@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { signOut } from "next-auth/react";
 import {
   Activity,
   ChecklistItem,
@@ -19,7 +20,7 @@ import {
   timeBlocks,
   travelStyles,
 } from "@/lib/travel";
-import { travelApi } from "@/lib/api";
+import { travelApi, type CurrentUser } from "@/lib/api";
 import type { AiRecommendation, AiSearchPlace, AiTripPreview } from "@/lib/ai-recommendations";
 import type { TripTemplate } from "@/lib/trip-templates";
 import { buildPartnerLinks } from "@/lib/integrations";
@@ -109,10 +110,24 @@ export function TravelPlannerApp() {
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
   const [templates, setTemplates] = useState<Array<Omit<TripTemplate, "days" | "costItems" | "checklistItems"> & { dayCount: number }>>([]);
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const text = uiText[locale];
 
   useEffect(() => {
     let isMounted = true;
+
+    travelApi
+      .getCurrentUser()
+      .then((user) => {
+        if (isMounted) {
+          setCurrentUser(user);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setCurrentUser(null);
+        }
+      });
 
     Promise.all([travelApi.listTrips(), travelApi.listTemplates()])
       .then(([loadedTrips, loadedTemplates]) => {
@@ -569,7 +584,7 @@ export function TravelPlannerApp() {
 
   return (
     <main className="min-h-screen bg-[#f4f1e8] text-[#17211b]">
-      <TopNavigation locale={locale} onLocaleChange={setLocale} />
+      <TopNavigation locale={locale} currentUser={currentUser} onLocaleChange={setLocale} />
 
       {isLoadingTrips || statusMessage ? (
         <section className="mx-auto max-w-[1480px] px-4 pb-2 sm:px-6 lg:px-8">
@@ -744,12 +759,15 @@ export function TravelPlannerApp() {
 
 function TopNavigation({
   locale,
+  currentUser,
   onLocaleChange,
 }: {
   locale: Locale;
+  currentUser: CurrentUser | null;
   onLocaleChange: (locale: Locale) => void;
 }) {
   const text = uiText[locale];
+  const userLabel = currentUser?.name ?? currentUser?.email ?? "";
 
   return (
     <header className="mx-auto flex max-w-[1480px] items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
@@ -783,12 +801,29 @@ function TopNavigation({
             </button>
           ))}
         </div>
-        <Link
-          href="/signin"
-          className="rounded-full border border-[#17211b] bg-[#17211b] px-4 py-2 text-xs font-extrabold text-white"
-        >
-          {locale === "vi" ? "Đăng nhập" : "Sign in"}
-        </Link>
+        {currentUser ? (
+          <div className="flex items-center gap-2 rounded-full border border-[#d8cfbd] bg-[#fffdf8] py-1 pl-3 pr-1">
+            <div className="hidden max-w-44 truncate text-xs font-extrabold text-[#17211b] sm:block">
+              {userLabel}
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                void signOut({ callbackUrl: "/" });
+              }}
+              className="rounded-full bg-[#17211b] px-3 py-1.5 text-xs font-extrabold text-white"
+            >
+              {locale === "vi" ? "\u0110\u0103ng xu\u1ea5t" : "Sign out"}
+            </button>
+          </div>
+        ) : (
+          <Link
+            href="/signin"
+            className="rounded-full border border-[#17211b] bg-[#17211b] px-4 py-2 text-xs font-extrabold text-white"
+          >
+            {locale === "vi" ? "\u0110\u0103ng nh\u1eadp" : "Sign in"}
+          </Link>
+        )}
       </nav>
     </header>
   );
