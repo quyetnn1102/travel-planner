@@ -81,6 +81,90 @@ model Trip {
   @@map("trips")
 }
 
+model TripTemplate {
+  id             String        @id
+  title          String
+  destination    String
+  durationDays   Int           @map("duration_days")
+  adultCount     Int           @default(2) @map("adult_count")
+  childCount     Int           @default(0) @map("child_count")
+  budgetAmount   Decimal?      @map("budget_amount") @db.Decimal(12, 2)
+  currency       String        @default("VND")
+  travelStyle    TravelStyle[] @map("travel_style")
+  summary        String
+  suggestedArea  String?       @map("suggested_area")
+  coverImageUrl  String?       @map("cover_image_url")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  days           TemplateDay[]
+  costItems      TemplateCostItem[]
+  checklistItems TemplateChecklistItem[]
+
+  @@index([destination])
+  @@map("trip_templates")
+}
+
+model TemplateDay {
+  id         String   @id
+  templateId String   @map("template_id")
+  dayNumber  Int      @map("day_number")
+  title      String
+  summary    String?
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  template   TripTemplate       @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  activities TemplateActivity[]
+
+  @@unique([templateId, dayNumber])
+  @@map("template_days")
+}
+
+model TemplateActivity {
+  id            String    @id
+  templateDayId String    @map("template_day_id")
+  timeBlock     TimeBlock @map("time_block")
+  title         String
+  locationName  String?   @map("location_name")
+  estimatedCost Decimal?  @map("estimated_cost") @db.Decimal(12, 2)
+  notes         String?
+  sortOrder     Int       @default(0) @map("sort_order")
+
+  templateDay TemplateDay @relation(fields: [templateDayId], references: [id], onDelete: Cascade)
+
+  @@index([templateDayId, timeBlock, sortOrder])
+  @@map("template_activities")
+}
+
+model TemplateCostItem {
+  id         String       @id
+  templateId String       @map("template_id")
+  category   CostCategory
+  name       String
+  amount     Decimal      @db.Decimal(12, 2)
+  quantity   Int          @default(1)
+  notes      String?
+
+  template TripTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId, category])
+  @@map("template_cost_items")
+}
+
+model TemplateChecklistItem {
+  id         String  @id
+  templateId String  @map("template_id")
+  title      String
+  category   String?
+  sortOrder  Int     @default(0) @map("sort_order")
+
+  template TripTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId, sortOrder])
+  @@map("template_checklist_items")
+}
+
 model ItineraryDay {
   id        String   @id @default(uuid())
   tripId    String   @map("trip_id")
@@ -175,13 +259,13 @@ model Account {
   type              String
   provider          String
   providerAccountId String  @map("provider_account_id")
-  refreshToken      String? @map("refresh_token")
-  accessToken       String? @map("access_token")
-  expiresAt         Int?    @map("expires_at")
-  tokenType         String? @map("token_type")
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
   scope             String?
-  idToken           String? @map("id_token")
-  sessionState      String? @map("session_state")
+  id_token          String? @db.Text
+  session_state     String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

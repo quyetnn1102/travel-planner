@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   Activity,
   ChecklistItem,
@@ -20,6 +21,7 @@ import {
 } from "@/lib/travel";
 import { travelApi } from "@/lib/api";
 import type { AiRecommendation, AiSearchPlace, AiTripPreview } from "@/lib/ai-recommendations";
+import type { TripTemplate } from "@/lib/trip-templates";
 import { buildPartnerLinks } from "@/lib/integrations";
 import {
   Locale,
@@ -106,19 +108,20 @@ export function TravelPlannerApp() {
   const [tripPreview, setTripPreview] = useState<AiTripPreview | null>(null);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
+  const [templates, setTemplates] = useState<Array<Omit<TripTemplate, "days" | "costItems" | "checklistItems"> & { dayCount: number }>>([]);
   const text = uiText[locale];
 
   useEffect(() => {
     let isMounted = true;
 
-    travelApi
-      .listTrips()
-      .then((loadedTrips) => {
+    Promise.all([travelApi.listTrips(), travelApi.listTemplates()])
+      .then(([loadedTrips, loadedTemplates]) => {
         if (!isMounted) {
           return;
         }
 
         setTrips(loadedTrips);
+        setTemplates(loadedTemplates);
         setSelectedTripId(loadedTrips[0]?.id ?? "");
         setActiveDayId(loadedTrips[0]?.itineraryDays[0]?.id ?? "");
       })
@@ -251,6 +254,19 @@ export function TravelPlannerApp() {
   function previewCancel() {
     setTripPreview(null);
     setIsPreviewing(false);
+  }
+
+  function useTemplate(templateId: string) {
+    void runMutation(async () => {
+      const result = await travelApi.useTemplate(templateId);
+      const trip = await travelApi.getTrip(result.tripId);
+      setTrips((currentTrips) => [trip, ...currentTrips.filter((item) => item.id !== trip.id)]);
+      setSelectedTripId(trip.id);
+      setActiveDayId(trip.itineraryDays[0]?.id ?? "");
+      setActiveTab("itinerary");
+      setIsPreviewing(false);
+      setTripPreview(null);
+    });
   }
 
   function deleteTrip(tripId: string) {
@@ -604,7 +620,10 @@ export function TravelPlannerApp() {
               onCancel={previewCancel}
             />
           ) : (
-            <TripDraftForm draft={tripDraft} locale={locale} onDraftChange={setTripDraft} onSubmit={handleFormPreview} isLoading={isGeneratingPreview} />
+            <div className="space-y-4">
+              <TemplateStarterPanel templates={templates} locale={locale} onUseTemplate={useTemplate} />
+              <TripDraftForm draft={tripDraft} locale={locale} onDraftChange={setTripDraft} onSubmit={handleFormPreview} isLoading={isGeneratingPreview} />
+            </div>
           )}
         </div>
       </section>
@@ -764,8 +783,66 @@ function TopNavigation({
             </button>
           ))}
         </div>
+        <Link
+          href="/api/auth/signin"
+          className="rounded-full border border-[#17211b] bg-[#17211b] px-4 py-2 text-xs font-extrabold text-white"
+        >
+          {locale === "vi" ? "Đăng nhập" : "Sign in"}
+        </Link>
       </nav>
     </header>
+  );
+}
+
+function TemplateStarterPanel({
+  templates,
+  locale,
+  onUseTemplate,
+}: {
+  templates: Array<Omit<TripTemplate, "days" | "costItems" | "checklistItems"> & { dayCount: number }>;
+  locale: Locale;
+  onUseTemplate: (templateId: string) => void;
+}) {
+  if (templates.length === 0) {
+    return null;
+  }
+
+  const isVietnamese = locale === "vi";
+
+  return (
+    <section className="rounded-lg border border-white/16 bg-white/12 p-4 text-white backdrop-blur">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-bold uppercase text-white/70">
+            {isVietnamese ? "Mẫu có sẵn" : "Ready templates"}
+          </p>
+          <h2 className="mt-1 text-lg font-extrabold">
+            {isVietnamese ? "Bắt đầu từ lịch trình mẫu" : "Start from a proven plan"}
+          </h2>
+        </div>
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        {templates.slice(0, 4).map((template) => (
+          <article key={template.id} className="rounded-lg bg-white/12 p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-extrabold">{template.title}</h3>
+                <p className="mt-1 text-xs font-semibold text-white/72">
+                  {template.destination} · {template.durationDays} {isVietnamese ? "ngày" : "days"}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => onUseTemplate(template.id)}
+                className="rounded-md bg-white px-3 py-1.5 text-xs font-extrabold text-[#17211b]"
+              >
+                {isVietnamese ? "Dùng mẫu" : "Use"}
+              </button>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }
 

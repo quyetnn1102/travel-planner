@@ -24,6 +24,8 @@ import {
   TravelStyle as DbTravelStyleEnum,
 } from "@prisma/client";
 import { isRecord, toNumber, toStringValue } from "@/server/api-response";
+import type { CurrentUser } from "@/server/auth";
+import { requireCurrentUser } from "@/server/auth";
 import { prisma } from "@/server/db";
 
 type DbActivity = {
@@ -117,8 +119,6 @@ type ChecklistInput = {
   category?: string;
 };
 
-const defaultUserId = process.env.TRAVEL_PLANNER_DEV_USER_ID ?? "dev-user";
-
 const tripInclude = {
   itineraryDays: {
     include: {
@@ -192,9 +192,9 @@ const costCategoryFromDb: Record<DbCostCategoryEnum, AppCostCategory> = {
 };
 
 export async function listTrips() {
-  await ensureUser();
+  const userId = await getScopedUserId();
   const trips = await prisma.trip.findMany({
-    where: { userId: defaultUserId },
+    where: { userId },
     include: tripInclude,
     orderBy: { updatedAt: "desc" },
   });
@@ -203,9 +203,9 @@ export async function listTrips() {
 }
 
 export async function getTrip(tripId: string) {
-  await ensureUser();
+  const userId = await getScopedUserId();
   const trip = await prisma.trip.findFirst({
-    where: { id: tripId, userId: defaultUserId },
+    where: { id: tripId, userId },
     include: tripInclude,
   });
 
@@ -213,11 +213,11 @@ export async function getTrip(tripId: string) {
 }
 
 export async function createTrip(input: unknown) {
-  await ensureUser();
+  const userId = await getScopedUserId();
   const draft = parseTripDraft(input);
   const trip = createTripFromDraft(draft);
   const created = await prisma.trip.create({
-    data: tripCreateData(trip),
+    data: tripCreateData(trip, userId),
     include: tripInclude,
   });
 
@@ -300,8 +300,9 @@ export async function updateTrip(tripId: string, input: unknown) {
 }
 
 export async function deleteTrip(tripId: string) {
+  const userId = await getScopedUserId();
   const deleted = await prisma.trip.deleteMany({
-    where: { id: tripId, userId: defaultUserId },
+    where: { id: tripId, userId },
   });
 
   return deleted.count > 0;
@@ -312,8 +313,9 @@ export async function getItinerary(tripId: string) {
 }
 
 export async function addActivity(dayId: string, input: unknown) {
+  const userId = await getScopedUserId();
   const day = await prisma.itineraryDay.findFirst({
-    where: { id: dayId, trip: { userId: defaultUserId } },
+    where: { id: dayId, trip: { userId } },
   });
 
   if (!day) {
@@ -351,8 +353,9 @@ export async function addActivity(dayId: string, input: unknown) {
 }
 
 export async function patchActivity(activityId: string, input: unknown) {
+  const userId = await getScopedUserId();
   const activity = await prisma.activity.findFirst({
-    where: { id: activityId, itineraryDay: { trip: { userId: defaultUserId } } },
+    where: { id: activityId, itineraryDay: { trip: { userId } } },
     include: { itineraryDay: true },
   });
 
@@ -380,8 +383,9 @@ export async function patchActivity(activityId: string, input: unknown) {
 }
 
 export async function deleteActivity(activityId: string) {
+  const userId = await getScopedUserId();
   const activity = await prisma.activity.findFirst({
-    where: { id: activityId, itineraryDay: { trip: { userId: defaultUserId } } },
+    where: { id: activityId, itineraryDay: { trip: { userId } } },
     include: { itineraryDay: true },
   });
 
@@ -395,8 +399,9 @@ export async function deleteActivity(activityId: string) {
 }
 
 export async function reorderActivities(dayId: string, input: unknown) {
+  const userId = await getScopedUserId();
   const day = await prisma.itineraryDay.findFirst({
-    where: { id: dayId, trip: { userId: defaultUserId } },
+    where: { id: dayId, trip: { userId } },
     include: { activities: true },
   });
 
@@ -459,8 +464,9 @@ export async function addCost(tripId: string, input: unknown) {
 }
 
 export async function patchCost(costId: string, input: unknown) {
+  const userId = await getScopedUserId();
   const cost = await prisma.costItem.findFirst({
-    where: { id: costId, trip: { userId: defaultUserId } },
+    where: { id: costId, trip: { userId } },
   });
 
   if (!cost) {
@@ -484,8 +490,9 @@ export async function patchCost(costId: string, input: unknown) {
 }
 
 export async function deleteCost(costId: string) {
+  const userId = await getScopedUserId();
   const cost = await prisma.costItem.findFirst({
-    where: { id: costId, trip: { userId: defaultUserId } },
+    where: { id: costId, trip: { userId } },
   });
 
   if (!cost) {
@@ -535,8 +542,9 @@ export async function addChecklistItem(tripId: string, input: unknown) {
 }
 
 export async function patchChecklistItem(itemId: string, input: unknown) {
+  const userId = await getScopedUserId();
   const item = await prisma.checklistItem.findFirst({
-    where: { id: itemId, trip: { userId: defaultUserId } },
+    where: { id: itemId, trip: { userId } },
   });
 
   if (!item) {
@@ -558,8 +566,9 @@ export async function patchChecklistItem(itemId: string, input: unknown) {
 }
 
 export async function deleteChecklistItem(itemId: string) {
+  const userId = await getScopedUserId();
   const item = await prisma.checklistItem.findFirst({
-    where: { id: itemId, trip: { userId: defaultUserId } },
+    where: { id: itemId, trip: { userId } },
   });
 
   if (!item) {
@@ -641,14 +650,23 @@ export async function getSharedTrip(shareToken: string) {
   return share ? mapTrip(share.trip) : null;
 }
 
-async function ensureUser() {
+async function getScopedUserId() {
+  const user = await requireCurrentUser();
+  await ensureUser(user);
+  return user.id;
+}
+
+async function ensureUser(user: CurrentUser) {
   await prisma.user.upsert({
-    where: { id: defaultUserId },
-    update: {},
+    where: { id: user.id },
+    update: {
+      name: user.name ?? undefined,
+      email: user.email ?? undefined,
+    },
     create: {
-      id: defaultUserId,
-      name: "Demo Traveler",
-      email: "demo@travel-planner.local",
+      id: user.id,
+      name: user.name ?? "Demo Traveler",
+      email: user.email ?? `${user.id}@travel-planner.local`,
     },
   });
 }
@@ -660,7 +678,7 @@ async function touchTrip(tripId: string) {
   });
 }
 
-function tripCreateData(trip: Trip) {
+function tripCreateData(trip: Trip, userId: string) {
   return {
     id: trip.id,
     title: trip.title,
@@ -673,7 +691,7 @@ function tripCreateData(trip: Trip) {
     currency: "VND",
     travelStyle: trip.travelStyles.map((style) => styleToDb[style]),
     notes: trip.notes,
-    userId: defaultUserId,
+    userId,
     itineraryDays: {
       create: trip.itineraryDays.map((day) => ({
         id: day.id,

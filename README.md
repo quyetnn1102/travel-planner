@@ -16,15 +16,14 @@ The dev script uses webpack (`next dev --webpack`) because Turbopack cache write
 
 ## AI Features
 
-All AI features use an Anthropic-compatible Messages API (DeepSeek by default). Configure in `.env`:
+All AI features use the OpenAI Responses API. Configure in `.env`:
 
 ```bash
-ANTHROPIC_API_KEY="sk-..."           # required
-ANTHROPIC_MODEL="deepseek-v4-flash"  # optional
-ANTHROPIC_BASE_URL="https://api.deepseek.com/anthropic"  # optional
+OPENAI_API_KEY="sk-..."      # required
+OPENAI_MODEL="gpt-4o-mini"   # optional
 ```
 
-No database is required for local dev — the in-memory store auto-activates. AI features only need the API key above.
+No database is required for local dev - the in-memory store auto-activates. AI features only need the API key above.
 
 ### AI Recommendations (`POST /api/ai/recommendations`)
 
@@ -60,6 +59,25 @@ pnpm build
 ```
 
 On Vercel with the Supabase integration, migrations prefer `POSTGRE_SQL_POSTGRES_URL_NON_POOLING` or `POSTGRES_URL_NON_POOLING` when present, while runtime database calls use the pooled app URL from `DATABASE_URL`, `POSTGRE_SQL_POSTGRES_PRISMA_URL`, `POSTGRES_PRISMA_URL`, or `POSTGRES_URL`. The Vercel build command is configured in `vercel.json` to run migrations before `pnpm build`; demo data is inserted by an idempotent SQL migration.
+
+## Authentication
+
+Production private APIs require Auth.js session auth with Google login. Configure these variables in Vercel:
+
+```bash
+AUTH_SECRET="generate-a-long-random-value"
+GOOGLE_CLIENT_ID="..."
+GOOGLE_CLIENT_SECRET="..."
+NEXTAUTH_URL="https://your-vercel-app.vercel.app"
+```
+
+Google OAuth callback URL:
+
+```text
+https://your-vercel-app.vercel.app/api/auth/callback/google
+```
+
+Local development can still run without Google credentials; it falls back to a local development user when no database URL is configured.
 
 ## Partner Links
 

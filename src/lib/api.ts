@@ -10,6 +10,7 @@ import type {
 } from "@/lib/travel";
 import type { PublicTrip } from "@/lib/public-trip";
 import type { AiRecommendationsResponse, AiSearchPlacesResponse, AiTripPreviewResponse } from "@/lib/ai-recommendations";
+import type { TripTemplate } from "@/lib/trip-templates";
 
 type ApiResult<T> = {
   data: T;
@@ -163,5 +164,12 @@ export const travelApi = {
     request<AiTripPreviewResponse>("/api/ai/preview-trip", {
       method: "POST",
       body: jsonBody({ draft }),
+    }),
+  listTemplates: () => request<Array<Omit<TripTemplate, "days" | "costItems" | "checklistItems"> & { dayCount: number }>>("/api/templates"),
+  getTemplate: (templateId: string) => request<TripTemplate>(`/api/templates/${templateId}`),
+  useTemplate: (templateId: string, startDate?: string) =>
+    request<{ tripId: string }>(`/api/templates/${templateId}/use`, {
+      method: "POST",
+      body: jsonBody({ startDate }),
     }),
 };

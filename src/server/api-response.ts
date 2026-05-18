@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 export type ApiErrorCode =
+  | "UNAUTHORIZED"
   | "BAD_REQUEST"
   | "NOT_FOUND"
   | "FORBIDDEN"
@@ -25,6 +26,14 @@ export function ok<T>(data: T, init?: ResponseInit) {
 
 export function fail(code: ApiErrorCode, message: string, status = 400) {
   return NextResponse.json<ApiError>({ error: { code, message } }, { status });
+}
+
+export function failFromError(error: unknown, fallbackMessage = "Request failed.") {
+  if (error instanceof Error && error.name === "AuthenticationError") {
+    return fail("UNAUTHORIZED", error.message, 401);
+  }
+
+  return fail("BAD_REQUEST", error instanceof Error ? error.message : fallbackMessage);
 }
 
 export async function readJson<T>(request: Request): Promise<T | null> {

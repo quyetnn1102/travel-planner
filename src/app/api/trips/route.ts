@@ -1,10 +1,14 @@
-import { fail, ok, readJson } from "@/server/api-response";
+import { fail, failFromError, ok, readJson } from "@/server/api-response";
 import { toClientErrorMessage } from "@/server/errors";
 import { createTrip, listTrips } from "@/server/travel-store";
 import { parseTripDraftInput } from "@/server/validation/trip";
 
 export async function GET() {
-  return ok(await listTrips());
+  try {
+    return ok(await listTrips());
+  } catch (error) {
+    return failFromError(error, "Could not load trips.");
+  }
 }
 
 export async function POST(request: Request) {
