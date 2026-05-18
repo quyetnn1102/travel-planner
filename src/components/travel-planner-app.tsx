@@ -784,7 +784,7 @@ function TopNavigation({
           ))}
         </div>
         <Link
-          href="/api/auth/signin"
+          href="/signin"
           className="rounded-full border border-[#17211b] bg-[#17211b] px-4 py-2 text-xs font-extrabold text-white"
         >
           {locale === "vi" ? "Đăng nhập" : "Sign in"}

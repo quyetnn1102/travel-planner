@@ -71,6 +71,8 @@ GOOGLE_CLIENT_SECRET="..."
 NEXTAUTH_URL="https://your-vercel-app.vercel.app"
 ```
 
+`AUTH_GOOGLE_ID` and `AUTH_GOOGLE_SECRET` are also accepted if you prefer Auth.js's provider env names.
+
 Google OAuth callback URL:
 
 ```text
