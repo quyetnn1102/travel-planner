@@ -1,6 +1,6 @@
 # Travel Planner MVP
 
-Next.js travel planning MVP with trip management, itinerary blocks, cost tracking, checklist, public share links, partner booking links, and Vietnamese/English UI switching.
+Next.js 16 travel planning app with AI-powered itinerary generation, place search, trip preview, cost tracking, checklist, public share links, partner booking links, and Vietnamese/English UI.
 
 ## Run
 
@@ -13,6 +13,34 @@ pnpm dev
 Open http://localhost:3000.
 
 The dev script uses webpack (`next dev --webpack`) because Turbopack cache writes hit disk-space limits in this workspace.
+
+## AI Features
+
+All AI features use an Anthropic-compatible Messages API (DeepSeek by default). Configure in `.env`:
+
+```bash
+ANTHROPIC_API_KEY="sk-..."           # required
+ANTHROPIC_MODEL="deepseek-v4-flash"  # optional
+ANTHROPIC_BASE_URL="https://api.deepseek.com/anthropic"  # optional
+```
+
+No database is required for local dev — the in-memory store auto-activates. AI features only need the API key above.
+
+### AI Recommendations (`POST /api/ai/recommendations`)
+
+Select a trip and click **Generate** in the AI panel. Returns 1-3 optimization ideas. Each card has a day selector and time-block buttons to add it as an activity.
+
+### Place Search (`POST /api/ai/search-places`)
+
+In the **Itinerary** tab, type a query (e.g. "temples", "ramen ngon") and press Enter. Returns 3-4 real places with suggested time blocks. Add any result to a day/time block.
+
+### Trip Preview (`POST /api/ai/preview-trip`)
+
+When creating a trip, the AI generates a preview with a suggested title, destination description, and day-by-day plan before the trip is created. Edit the title, review, then confirm.
+
+### Auto-Generate Itinerary (`POST /api/ai/generate-itinerary`)
+
+After a trip is created, the AI auto-populates activities across all days based on destination, dates, travel style, and budget.
 
 ## Database
 
