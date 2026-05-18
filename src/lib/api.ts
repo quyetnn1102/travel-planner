@@ -9,7 +9,7 @@ import type {
   TripShare,
 } from "@/lib/travel";
 import type { PublicTrip } from "@/lib/public-trip";
-import type { AiRecommendationsResponse } from "@/lib/ai-recommendations";
+import type { AiRecommendationsResponse, AiSearchPlacesResponse, AiTripPreviewResponse } from "@/lib/ai-recommendations";
 
 type ApiResult<T> = {
   data: T;
@@ -148,5 +148,20 @@ export const travelApi = {
     request<AiRecommendationsResponse>("/api/ai/recommendations", {
       method: "POST",
       body: jsonBody({ tripId }),
+    }),
+  generateItinerary: (tripId: string) =>
+    request<{ added: Array<{ dayNumber: number; title: string; timeBlock: string }> }>(
+      "/api/ai/generate-itinerary",
+      { method: "POST", body: jsonBody({ tripId }) },
+    ),
+  searchPlaces: (tripId: string, query: string) =>
+    request<AiSearchPlacesResponse>("/api/ai/search-places", {
+      method: "POST",
+      body: jsonBody({ tripId, query }),
+    }),
+  previewTrip: (draft: TripDraft) =>
+    request<AiTripPreviewResponse>("/api/ai/preview-trip", {
+      method: "POST",
+      body: jsonBody({ draft }),
     }),
 };

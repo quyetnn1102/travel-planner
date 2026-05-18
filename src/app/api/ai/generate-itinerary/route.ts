@@ -1,27 +1,35 @@
 import { fail, ok, readJson } from "@/server/api-response";
 import { ValidationError } from "@/server/errors";
-import { getTrip } from "@/server/travel-store";
+import { getTrip, addActivity } from "@/server/travel-store";
 import { z } from "zod";
 
-type RecommendationRequest = {
+type GenerateRequest = {
   tripId?: string;
 };
 
-const recommendationsSchema = z.object({
-  recommendations: z
-    .array(
-      z.object({
-        title: z.string().min(1),
-        rationale: z.string().min(1),
-        priority: z.enum(["high", "medium", "low"]),
-      }),
-    )
-    .min(1)
-    .max(3),
+const activityInputSchema = z.object({
+  title: z.string().min(1),
+  timeBlock: z.enum(["morning", "noon", "afternoon", "evening"]),
+  startTime: z.string().optional(),
+  endTime: z.string().optional(),
+  locationName: z.string().optional(),
+  estimatedCost: z.number().min(0).optional(),
+  notes: z.string().optional(),
 });
 
+const dayActivitiesSchema = z.object({
+  dayNumber: z.number().int().min(1),
+  activities: z.array(activityInputSchema).min(1),
+});
+
+const generateResponseSchema = z.object({
+  days: z.array(dayActivitiesSchema),
+});
+
+type GeneratedItinerary = z.infer<typeof generateResponseSchema>;
+
 export async function POST(request: Request) {
-  const body = (await readJson<RecommendationRequest>(request)) ?? {};
+  const body = (await readJson<GenerateRequest>(request)) ?? {};
 
   try {
     if (!body.tripId) {
@@ -39,14 +47,19 @@ export async function POST(request: Request) {
     if (!apiKey) {
       return fail(
         "SERVICE_UNAVAILABLE",
-        "AI recommendations are not configured. Set ANTHROPIC_API_KEY in the server environment.",
+        "AI itinerary generation is not configured. Set ANTHROPIC_API_KEY.",
         503,
       );
     }
 
     const model = process.env.ANTHROPIC_MODEL ?? "claude-haiku-4-5-20251001";
-
     const baseUrl = process.env.ANTHROPIC_BASE_URL ?? "https://api.anthropic.com/v1";
+
+    const dayList = trip.itineraryDays.map((day) => ({
+      dayNumber: day.dayNumber,
+      date: day.date,
+    }));
+
     const response = await fetch(`${baseUrl}/messages`, {
       method: "POST",
       headers: {
@@ -56,13 +69,13 @@ export async function POST(request: Request) {
       },
       body: JSON.stringify({
         model,
-        max_tokens: 2000,
+        max_tokens: 3000,
         system:
-          'You are a practical travel planner for Vietnamese travelers. Return only valid JSON with this exact shape: {"recommendations":[{"title":"...","rationale":"...","priority":"high|medium|low"}]}. Provide 1 to 3 concise, actionable recommendations. Do not include any other text.',
+          'You are a practical travel planner for Vietnamese travelers. Given a trip with dates and travel style, generate a realistic day-by-day itinerary. Return ONLY valid JSON with this exact shape: {"days":[{"dayNumber":1,"activities":[{"title":"...","timeBlock":"morning|noon|afternoon|evening","locationName":"...","notes":"...","estimatedCost":0}]}]}. Provide 2-4 activities per day spread across different time blocks. Include realistic locations and practical notes in Vietnamese. Do not include any other text.',
         messages: [
           {
             role: "user",
-            content: `Generate JSON recommendations for this trip:\n${JSON.stringify({
+            content: `Generate a full itinerary for this trip:\n${JSON.stringify({
               title: trip.title,
               destination: trip.destination,
               startDate: trip.startDate,
@@ -70,21 +83,7 @@ export async function POST(request: Request) {
               travelers: trip.adultCount + trip.childCount,
               budgetAmount: trip.budgetAmount,
               travelStyles: trip.travelStyles,
-              days: trip.itineraryDays.map((day) => ({
-                date: day.date,
-                activityCount: day.activities.length,
-                activities: day.activities.map((activity) => ({
-                  timeBlock: activity.timeBlock,
-                  title: activity.title,
-                  locationName: activity.locationName,
-                })),
-              })),
-              costs: trip.costItems.map((item) => ({
-                category: item.category,
-                name: item.name,
-                amount: item.amount,
-                quantity: item.quantity,
-              })),
+              days: dayList,
             })}`,
           },
         ],
@@ -94,7 +93,7 @@ export async function POST(request: Request) {
     const payload = await readAnthropicResponse(response);
 
     if (!response.ok) {
-      console.error("Anthropic recommendations request failed", {
+      console.error("Generate itinerary request failed", {
         status: response.status,
         errorType: payload.error?.type,
         message: payload.error?.message,
@@ -102,7 +101,7 @@ export async function POST(request: Request) {
 
       return fail(
         response.status === 401 ? "FORBIDDEN" : "BAD_REQUEST",
-        getAnthropicClientMessage(response.status, payload.error?.message),
+        `AI itinerary generation failed with status ${response.status}.`,
         response.status === 401 || response.status === 429 ? response.status : 400,
       );
     }
@@ -110,20 +109,61 @@ export async function POST(request: Request) {
     const text = getOutputText(payload);
 
     if (!text) {
-      console.error("Anthropic recommendations response did not include output text");
-      return fail("BAD_REQUEST", "Anthropic returned an empty recommendation response.", 400);
+      console.error("Generate itinerary response did not include output text");
+      return fail("BAD_REQUEST", "AI returned an empty itinerary response.", 400);
     }
 
-    const parsed = parseRecommendations(text);
+    const parsed = parseGeneratedItinerary(text);
 
-    return ok(parsed);
+    const dayMap = new Map(trip.itineraryDays.map((day) => [day.dayNumber, day]));
+    const added: Array<{ dayNumber: number; title: string; timeBlock: string }> = [];
+
+    for (const dayPlan of parsed.days) {
+      const day = dayMap.get(dayPlan.dayNumber);
+
+      if (!day) {
+        continue;
+      }
+
+      for (const activity of dayPlan.activities) {
+        await addActivity(day.id, {
+          title: activity.title,
+          timeBlock: activity.timeBlock,
+          startTime: activity.startTime ?? "",
+          endTime: activity.endTime ?? "",
+          locationName: activity.locationName ?? "",
+          address: "",
+          estimatedCost: activity.estimatedCost ?? 0,
+          notes: activity.notes ?? "",
+        });
+
+        added.push({
+          dayNumber: dayPlan.dayNumber,
+          title: activity.title,
+          timeBlock: activity.timeBlock,
+        });
+      }
+    }
+
+    return ok({ added });
   } catch (error) {
-    console.error("AI recommendations route failed", {
+    console.error("Generate itinerary route failed", {
       message: error instanceof Error ? error.message : String(error),
     });
 
     return fail("BAD_REQUEST", getAiClientErrorMessage(error));
   }
+}
+
+function parseGeneratedItinerary(text: string): GeneratedItinerary {
+  const parsed = JSON.parse(stripJsonCodeFence(text)) as unknown;
+  const result = generateResponseSchema.safeParse(parsed);
+
+  if (!result.success) {
+    throw new ValidationError(result.error.issues[0]?.message ?? "AI itinerary response did not match the expected format.");
+  }
+
+  return result.data;
 }
 
 type AnthropicContentBlock =
@@ -137,17 +177,6 @@ type AnthropicResponse = {
     message?: string;
   };
 };
-
-function parseRecommendations(text: string) {
-  const parsed = safeParseJson(stripJsonCodeFence(text)) as unknown;
-  const result = recommendationsSchema.safeParse(parsed);
-
-  if (!result.success) {
-    throw new ValidationError(result.error.issues[0]?.message ?? "AI response did not match the expected format.");
-  }
-
-  return result.data;
-}
 
 function getOutputText(payload: AnthropicResponse) {
   const blocks = payload.content ?? [];
@@ -208,25 +237,9 @@ function getOutputText(payload: AnthropicResponse) {
   return fixed;
 }
 
-function getAnthropicClientMessage(status: number, upstreamMessage?: string) {
-  if (status === 401) {
-    return "Anthropic rejected the API key. Check ANTHROPIC_API_KEY in Vercel.";
-  }
-
-  if (status === 429) {
-    return "Anthropic rate limit was reached. Check your Anthropic billing and usage limits.";
-  }
-
-  if (status === 400 && upstreamMessage) {
-    return `Anthropic rejected the request: ${upstreamMessage}`;
-  }
-
-  return `Anthropic request failed with status ${status}${upstreamMessage ? `: ${upstreamMessage}` : "."}`;
-}
-
 function getAiClientErrorMessage(error: unknown) {
   if (error instanceof SyntaxError) {
-    return "Anthropic returned a response that was not valid JSON.";
+    return "AI returned a response that was not valid JSON.";
   }
 
   if (error instanceof ValidationError) {
@@ -234,44 +247,10 @@ function getAiClientErrorMessage(error: unknown) {
   }
 
   if (error instanceof Error) {
-    return `AI recommendation failed: ${truncateMessage(error.message)}`;
+    return `AI itinerary generation failed: ${truncateMessage(error.message)}`;
   }
 
-  return `AI recommendation failed with an unknown server error: ${truncateMessage(String(error))}`;
-}
-
-function safeParseJson(text: string) {
-  // First try direct parse
-  try {
-    return JSON.parse(text);
-  } catch {
-    // noop, try recovery below
-  }
-
-  // Try to recover truncated JSON by completing the structure
-  let fixed = text.trimEnd();
-  // Count open vs close braces/brackets
-  let braceCount = 0;
-  let bracketCount = 0;
-  let inString = false;
-  let escaped = false;
-  for (const ch of fixed) {
-    if (escaped) { escaped = false; continue; }
-    if (ch === "\\") { escaped = true; continue; }
-    if (ch === '"') { inString = !inString; continue; }
-    if (inString) continue;
-    if (ch === "{") braceCount++;
-    if (ch === "}") braceCount--;
-    if (ch === "[") bracketCount++;
-    if (ch === "]") bracketCount--;
-  }
-  // If we ended mid-string, close it
-  if (inString) fixed += '"';
-  // Close any open structures
-  while (bracketCount > 0) { fixed += "]"; bracketCount--; }
-  while (braceCount > 0) { fixed += "}"; braceCount--; }
-
-  return JSON.parse(fixed);
+  return `AI itinerary generation failed: ${truncateMessage(String(error))}`;
 }
 
 function stripJsonCodeFence(text: string) {

@@ -3,29 +3,36 @@ import { ValidationError } from "@/server/errors";
 import { getTrip } from "@/server/travel-store";
 import { z } from "zod";
 
-type RecommendationRequest = {
+type SearchRequest = {
   tripId?: string;
+  query?: string;
 };
 
-const recommendationsSchema = z.object({
-  recommendations: z
+const searchPlacesSchema = z.object({
+  places: z
     .array(
       z.object({
-        title: z.string().min(1),
-        rationale: z.string().min(1),
-        priority: z.enum(["high", "medium", "low"]),
+        name: z.string().min(1),
+        description: z.string().min(1),
+        locationName: z.string().min(1),
+        suggestedTimeBlock: z.enum(["morning", "noon", "afternoon", "evening"]),
+        estimatedCost: z.number().min(0),
       }),
     )
     .min(1)
-    .max(3),
+    .max(5),
 });
 
 export async function POST(request: Request) {
-  const body = (await readJson<RecommendationRequest>(request)) ?? {};
+  const body = (await readJson<SearchRequest>(request)) ?? {};
 
   try {
     if (!body.tripId) {
       throw new ValidationError("Trip id is required.");
+    }
+
+    if (!body.query?.trim()) {
+      throw new ValidationError("Search query is required.");
     }
 
     const trip = await getTrip(body.tripId);
@@ -37,16 +44,12 @@ export async function POST(request: Request) {
     const apiKey = process.env.ANTHROPIC_API_KEY?.trim().replace(/^["']|["']$/g, "");
 
     if (!apiKey) {
-      return fail(
-        "SERVICE_UNAVAILABLE",
-        "AI recommendations are not configured. Set ANTHROPIC_API_KEY in the server environment.",
-        503,
-      );
+      return fail("SERVICE_UNAVAILABLE", "AI search is not configured. Set ANTHROPIC_API_KEY.", 503);
     }
 
     const model = process.env.ANTHROPIC_MODEL ?? "claude-haiku-4-5-20251001";
-
     const baseUrl = process.env.ANTHROPIC_BASE_URL ?? "https://api.anthropic.com/v1";
+
     const response = await fetch(`${baseUrl}/messages`, {
       method: "POST",
       headers: {
@@ -56,36 +59,23 @@ export async function POST(request: Request) {
       },
       body: JSON.stringify({
         model,
-        max_tokens: 2000,
+        max_tokens: 3000,
         system:
-          'You are a practical travel planner for Vietnamese travelers. Return only valid JSON with this exact shape: {"recommendations":[{"title":"...","rationale":"...","priority":"high|medium|low"}]}. Provide 1 to 3 concise, actionable recommendations. Do not include any other text.',
+          'Return JSON: {"places":[{"name":"short name","description":"1-line description in Vietnamese","locationName":"area","suggestedTimeBlock":"morning|noon|afternoon|evening","estimatedCost":0}]}. Suggest 3-4 real places. Be concise. No other text.',
         messages: [
           {
             role: "user",
-            content: `Generate JSON recommendations for this trip:\n${JSON.stringify({
-              title: trip.title,
+            content: JSON.stringify({
               destination: trip.destination,
               startDate: trip.startDate,
               endDate: trip.endDate,
-              travelers: trip.adultCount + trip.childCount,
-              budgetAmount: trip.budgetAmount,
               travelStyles: trip.travelStyles,
-              days: trip.itineraryDays.map((day) => ({
-                date: day.date,
-                activityCount: day.activities.length,
-                activities: day.activities.map((activity) => ({
-                  timeBlock: activity.timeBlock,
-                  title: activity.title,
-                  locationName: activity.locationName,
-                })),
-              })),
-              costs: trip.costItems.map((item) => ({
-                category: item.category,
-                name: item.name,
-                amount: item.amount,
-                quantity: item.quantity,
-              })),
-            })}`,
+              budgetAmount: trip.budgetAmount,
+              query: body.query?.trim(),
+              existingActivities: trip.itineraryDays.flatMap((day) =>
+                day.activities.map((activity) => activity.title),
+              ),
+            }),
           },
         ],
       }),
@@ -94,7 +84,7 @@ export async function POST(request: Request) {
     const payload = await readAnthropicResponse(response);
 
     if (!response.ok) {
-      console.error("Anthropic recommendations request failed", {
+      console.error("Search places request failed", {
         status: response.status,
         errorType: payload.error?.type,
         message: payload.error?.message,
@@ -102,7 +92,7 @@ export async function POST(request: Request) {
 
       return fail(
         response.status === 401 ? "FORBIDDEN" : "BAD_REQUEST",
-        getAnthropicClientMessage(response.status, payload.error?.message),
+        `AI search failed with status ${response.status}.`,
         response.status === 401 || response.status === 429 ? response.status : 400,
       );
     }
@@ -110,20 +100,35 @@ export async function POST(request: Request) {
     const text = getOutputText(payload);
 
     if (!text) {
-      console.error("Anthropic recommendations response did not include output text");
-      return fail("BAD_REQUEST", "Anthropic returned an empty recommendation response.", 400);
+      console.error("Search places response did not include output text", {
+        contentCount: payload.content?.length ?? 0,
+        contentTypes: payload.content?.map((block) => block.type) ?? [],
+        sample: JSON.stringify(payload).substring(0, 500),
+      });
+      return fail("BAD_REQUEST", "AI returned an empty search response.", 400);
     }
 
-    const parsed = parseRecommendations(text);
+    const parsed = parseSearchResults(text);
 
     return ok(parsed);
   } catch (error) {
-    console.error("AI recommendations route failed", {
+    console.error("Search places route failed", {
       message: error instanceof Error ? error.message : String(error),
     });
 
     return fail("BAD_REQUEST", getAiClientErrorMessage(error));
   }
+}
+
+function parseSearchResults(text: string) {
+  const parsed = safeParseJson(stripJsonCodeFence(text)) as unknown;
+  const result = searchPlacesSchema.safeParse(parsed);
+
+  if (!result.success) {
+    throw new ValidationError(result.error.issues[0]?.message ?? "AI search response did not match the expected format.");
+  }
+
+  return result.data;
 }
 
 type AnthropicContentBlock =
@@ -138,20 +143,10 @@ type AnthropicResponse = {
   };
 };
 
-function parseRecommendations(text: string) {
-  const parsed = safeParseJson(stripJsonCodeFence(text)) as unknown;
-  const result = recommendationsSchema.safeParse(parsed);
-
-  if (!result.success) {
-    throw new ValidationError(result.error.issues[0]?.message ?? "AI response did not match the expected format.");
-  }
-
-  return result.data;
-}
-
 function getOutputText(payload: AnthropicResponse) {
   const blocks = payload.content ?? [];
 
+  // Prefer text blocks
   const textBlock = blocks
     .filter((block): block is { type: "text"; text: string } => block.type === "text")
     .map((block) => block.text)
@@ -159,6 +154,7 @@ function getOutputText(payload: AnthropicResponse) {
 
   if (textBlock) return textBlock;
 
+  // Fall back to thinking blocks (some models put output there)
   const thinkingBlock = blocks
     .filter((block): block is { type: "thinking"; thinking: string } => block.type === "thinking")
     .map((block) => (block as { thinking: string }).thinking)
@@ -166,6 +162,7 @@ function getOutputText(payload: AnthropicResponse) {
 
   if (!thinkingBlock) return undefined;
 
+  // Find the LAST { that starts a JSON object — the actual response, not the template
   const lastBrace = thinkingBlock.lastIndexOf('{');
   if (lastBrace === -1) return undefined;
 
@@ -187,14 +184,15 @@ function getOutputText(payload: AnthropicResponse) {
       return thinkingBlock.substring(lastBrace, i + 1);
     }
   }
+  // If not balanced, apply safeParseJson recovery
   let fixed = thinkingBlock.substring(lastBrace);
   let bCount = 0;
   let brCount = 0;
   let inS = false;
-  let es2 = false;
+  let es = false;
   for (const ch of fixed) {
-    if (es2) { es2 = false; continue; }
-    if (ch === '\\') { es2 = true; continue; }
+    if (es) { es = false; continue; }
+    if (ch === '\\') { es = true; continue; }
     if (ch === '"') { inS = !inS; continue; }
     if (inS) continue;
     if (ch === '{') bCount++;
@@ -208,25 +206,9 @@ function getOutputText(payload: AnthropicResponse) {
   return fixed;
 }
 
-function getAnthropicClientMessage(status: number, upstreamMessage?: string) {
-  if (status === 401) {
-    return "Anthropic rejected the API key. Check ANTHROPIC_API_KEY in Vercel.";
-  }
-
-  if (status === 429) {
-    return "Anthropic rate limit was reached. Check your Anthropic billing and usage limits.";
-  }
-
-  if (status === 400 && upstreamMessage) {
-    return `Anthropic rejected the request: ${upstreamMessage}`;
-  }
-
-  return `Anthropic request failed with status ${status}${upstreamMessage ? `: ${upstreamMessage}` : "."}`;
-}
-
 function getAiClientErrorMessage(error: unknown) {
   if (error instanceof SyntaxError) {
-    return "Anthropic returned a response that was not valid JSON.";
+    return "AI returned a response that was not valid JSON.";
   }
 
   if (error instanceof ValidationError) {
@@ -234,23 +216,20 @@ function getAiClientErrorMessage(error: unknown) {
   }
 
   if (error instanceof Error) {
-    return `AI recommendation failed: ${truncateMessage(error.message)}`;
+    return `AI search failed: ${truncateMessage(error.message)}`;
   }
 
-  return `AI recommendation failed with an unknown server error: ${truncateMessage(String(error))}`;
+  return `AI search failed: ${truncateMessage(String(error))}`;
 }
 
 function safeParseJson(text: string) {
-  // First try direct parse
   try {
     return JSON.parse(text);
   } catch {
-    // noop, try recovery below
+    // noop
   }
 
-  // Try to recover truncated JSON by completing the structure
   let fixed = text.trimEnd();
-  // Count open vs close braces/brackets
   let braceCount = 0;
   let bracketCount = 0;
   let inString = false;
@@ -265,9 +244,7 @@ function safeParseJson(text: string) {
     if (ch === "[") bracketCount++;
     if (ch === "]") bracketCount--;
   }
-  // If we ended mid-string, close it
   if (inString) fixed += '"';
-  // Close any open structures
   while (bracketCount > 0) { fixed += "]"; bracketCount--; }
   while (braceCount > 0) { fixed += "}"; braceCount--; }
 

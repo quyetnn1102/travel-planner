@@ -6,6 +6,7 @@ import {
   ChecklistItem,
   CostCategory,
   CostItem,
+  ItineraryDay,
   TimeBlock,
   TravelStyle,
   Trip,
@@ -18,7 +19,7 @@ import {
   travelStyles,
 } from "@/lib/travel";
 import { travelApi } from "@/lib/api";
-import type { AiRecommendation } from "@/lib/ai-recommendations";
+import type { AiRecommendation, AiSearchPlace, AiTripPreview } from "@/lib/ai-recommendations";
 import { buildPartnerLinks } from "@/lib/integrations";
 import {
   Locale,
@@ -100,6 +101,11 @@ export function TravelPlannerApp() {
   } | null>(null);
   const [generatingRecommendationsForTripId, setGeneratingRecommendationsForTripId] = useState<string | null>(null);
   const [locale, setLocale] = useState<Locale>("vi");
+  const [searchResults, setSearchResults] = useState<AiSearchPlace[]>([]);
+  const [isSearchingPlaces, setIsSearchingPlaces] = useState(false);
+  const [tripPreview, setTripPreview] = useState<AiTripPreview | null>(null);
+  const [isPreviewing, setIsPreviewing] = useState(false);
+  const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
   const text = uiText[locale];
 
   useEffect(() => {
@@ -180,16 +186,71 @@ export function TravelPlannerApp() {
     }
   }
 
-  function createTrip(event: FormEvent<HTMLFormElement>) {
+  function handleFormPreview(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    void handlePreviewTrip(tripDraft);
+  }
+
+  async function handlePreviewTrip(draft: TripDraft) {
+    setStatusMessage(null);
+    setIsGeneratingPreview(true);
+
+    try {
+      const result = await travelApi.previewTrip(draft);
+      setTripPreview(result.preview);
+      setIsPreviewing(true);
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : text.saveError);
+    } finally {
+      setIsGeneratingPreview(false);
+    }
+  }
+
+  async function confirmTrip(editedTitle: string) {
+    if (!tripPreview) {
+      return;
+    }
+
     void runMutation(async () => {
-      const trip = await travelApi.createTrip(tripDraft);
+      const trip = await travelApi.createTrip({
+        ...tripDraft,
+        title: editedTitle.trim() || tripPreview.suggestedTitle,
+      });
       setTrips((currentTrips) => [trip, ...currentTrips]);
       setSelectedTripId(trip.id);
       setActiveDayId(trip.itineraryDays[0]?.id ?? "");
       setActiveTab("itinerary");
       setTripDraft(emptyTripDraft);
+
+      for (const previewDay of tripPreview.itineraryPreview) {
+        const day = trip.itineraryDays.find((d) => d.dayNumber === previewDay.dayNumber);
+        if (!day) {
+          continue;
+        }
+
+        for (const activity of previewDay.activities) {
+          await travelApi.addActivity(day.id, {
+            title: activity.title,
+            timeBlock: activity.timeBlock,
+            startTime: "",
+            endTime: "",
+            locationName: activity.locationName ?? "",
+            address: "",
+            estimatedCost: 0,
+            notes: activity.notes ?? "",
+          });
+        }
+      }
+
+      await refreshTrip(trip.id);
+      setTripPreview(null);
+      setIsPreviewing(false);
     });
+  }
+
+  function previewCancel() {
+    setTripPreview(null);
+    setIsPreviewing(false);
   }
 
   function deleteTrip(tripId: string) {
@@ -428,6 +489,68 @@ export function TravelPlannerApp() {
     });
   }
 
+  function addRecommendationAsActivity(
+    dayId: string,
+    timeBlock: TimeBlock,
+    recommendation: AiRecommendation,
+  ) {
+    if (!selectedTrip) {
+      return;
+    }
+
+    void runMutation(async () => {
+      await travelApi.addActivity(dayId, {
+        title: recommendation.title,
+        timeBlock,
+        startTime: "",
+        endTime: "",
+        locationName: "",
+        address: "",
+        estimatedCost: 0,
+        notes: recommendation.rationale,
+      });
+      await refreshTrip(selectedTrip.id);
+    });
+  }
+
+  async function searchPlacesHandler(query: string) {
+    if (!selectedTrip || !query.trim()) {
+      return;
+    }
+
+    setIsSearchingPlaces(true);
+
+    try {
+      const result = await travelApi.searchPlaces(selectedTrip.id, query.trim());
+      setSearchResults(result.places);
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : text.saveError);
+      setSearchResults([]);
+    } finally {
+      setIsSearchingPlaces(false);
+    }
+  }
+
+  function addSearchedPlace(dayId: string, timeBlock: TimeBlock, place: AiSearchPlace) {
+    if (!selectedTrip) {
+      return;
+    }
+
+    void runMutation(async () => {
+      await travelApi.addActivity(dayId, {
+        title: place.name,
+        timeBlock,
+        startTime: "",
+        endTime: "",
+        locationName: place.locationName,
+        address: "",
+        estimatedCost: place.estimatedCost,
+        notes: place.description,
+      });
+      await refreshTrip(selectedTrip.id);
+    });
+  }
+
   return (
     <main className="min-h-screen bg-[#f4f1e8] text-[#17211b]">
       <TopNavigation locale={locale} onLocaleChange={setLocale} />
@@ -472,7 +595,17 @@ export function TravelPlannerApp() {
             </div>
           </div>
 
-          <TripDraftForm draft={tripDraft} locale={locale} onDraftChange={setTripDraft} onSubmit={createTrip} />
+          {isPreviewing && tripPreview ? (
+            <TripPreviewPanel
+              draft={tripDraft}
+              preview={tripPreview}
+              locale={locale}
+              onConfirm={confirmTrip}
+              onCancel={previewCancel}
+            />
+          ) : (
+            <TripDraftForm draft={tripDraft} locale={locale} onDraftChange={setTripDraft} onSubmit={handleFormPreview} isLoading={isGeneratingPreview} />
+          )}
         </div>
       </section>
 
@@ -498,6 +631,7 @@ export function TravelPlannerApp() {
                     setSelectedTripId(trip.id);
                     setActiveDayId(trip.itineraryDays[0]?.id ?? "");
                     setIsEditingTrip(false);
+                    setSearchResults([]);
                   }}
                 />
               ))}
@@ -534,6 +668,8 @@ export function TravelPlannerApp() {
               isLoading={isGeneratingRecommendations}
               locale={locale}
               onGenerate={generateRecommendations}
+              itineraryDays={selectedTrip?.itineraryDays ?? []}
+              onAddAsActivity={addRecommendationAsActivity}
             />
 
             {activeTab === "itinerary" && activeDay ? (
@@ -547,6 +683,10 @@ export function TravelPlannerApp() {
                 onDeleteActivity={deleteActivity}
                 onMoveActivity={moveActivity}
                 locale={locale}
+                searchResults={searchResults}
+                isSearchingPlaces={isSearchingPlaces}
+                onSearchPlaces={searchPlacesHandler}
+                onAddPlace={addSearchedPlace}
               />
             ) : null}
 
@@ -634,11 +774,13 @@ function TripDraftForm({
   locale,
   onDraftChange,
   onSubmit,
+  isLoading,
 }: {
   draft: TripDraft;
   locale: Locale;
   onDraftChange: (draft: TripDraft) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  isLoading?: boolean;
 }) {
   const text = uiText[locale];
 
@@ -721,8 +863,12 @@ function TripDraftForm({
         />
       </div>
 
-      <button type="submit" className="mt-5 w-full rounded-lg bg-[#17211b] px-5 py-3 text-sm font-bold text-white">
-        {text.createItinerary}
+      <button
+        type="submit"
+        disabled={isLoading}
+        className="mt-5 w-full rounded-lg bg-[#17211b] px-5 py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {isLoading ? (locale === "vi" ? "AI đang tạo gợi ý..." : "AI generating preview...") : text.createItinerary}
       </button>
     </form>
   );
@@ -982,11 +1128,15 @@ function AiRecommendationsPanel({
   isLoading,
   locale,
   onGenerate,
+  itineraryDays,
+  onAddAsActivity,
 }: {
   recommendations: AiRecommendation[];
   isLoading: boolean;
   locale: Locale;
   onGenerate: () => void;
+  itineraryDays: ItineraryDay[];
+  onAddAsActivity: (dayId: string, timeBlock: TimeBlock, recommendation: AiRecommendation) => void;
 }) {
   const isVietnamese = locale === "vi";
 
@@ -1014,17 +1164,286 @@ function AiRecommendationsPanel({
       {recommendations.length > 0 ? (
         <div className="mt-4 grid gap-3 md:grid-cols-3">
           {recommendations.map((item) => (
-            <article key={`${item.priority}-${item.title}`} className="rounded-lg border border-[#eee5d3] bg-white p-3">
-              <span className="rounded-full bg-[#f1eadb] px-2 py-1 text-[11px] font-bold uppercase text-[#574f42]">
-                {item.priority}
-              </span>
-              <h4 className="mt-3 text-sm font-extrabold text-[#17211b]">{item.title}</h4>
-              <p className="mt-2 text-sm leading-5 text-[#615f57]">{item.rationale}</p>
-            </article>
+            <RecommendationCard
+              key={`${item.priority}-${item.title}`}
+              recommendation={item}
+              itineraryDays={itineraryDays}
+              locale={locale}
+              onAddAsActivity={onAddAsActivity}
+            />
           ))}
         </div>
       ) : null}
     </section>
+  );
+}
+
+function RecommendationCard({
+  recommendation,
+  itineraryDays,
+  locale,
+  onAddAsActivity,
+}: {
+  recommendation: AiRecommendation;
+  itineraryDays: ItineraryDay[];
+  locale: Locale;
+  onAddAsActivity: (dayId: string, timeBlock: TimeBlock, recommendation: AiRecommendation) => void;
+}) {
+  const [selectedDayId, setSelectedDayId] = useState(itineraryDays[0]?.id ?? "");
+
+  return (
+    <article className="rounded-lg border border-[#eee5d3] bg-white p-3">
+      <span className="rounded-full bg-[#f1eadb] px-2 py-1 text-[11px] font-bold uppercase text-[#574f42]">
+        {recommendation.priority}
+      </span>
+      <h4 className="mt-3 text-sm font-extrabold text-[#17211b]">{recommendation.title}</h4>
+      <p className="mt-2 text-sm leading-5 text-[#615f57]">{recommendation.rationale}</p>
+
+      {itineraryDays.length > 0 ? (
+        <div className="mt-3 border-t border-[#eee5d3] pt-3">
+          <label className="mb-2 block text-xs font-bold uppercase text-[#756f65]">
+            {locale === "vi" ? "Chọn ngày" : "Select day"}
+          </label>
+          <select
+            value={selectedDayId}
+            onChange={(event) => setSelectedDayId(event.target.value)}
+            className="input mb-2"
+          >
+            {itineraryDays.map((day) => (
+              <option key={day.id} value={day.id}>
+                {day.title} — {formatDate(day.date)}
+              </option>
+            ))}
+          </select>
+
+          <div className="flex gap-1">
+            {timeBlocks.map((block) => (
+              <button
+                key={block.value}
+                type="button"
+                onClick={() => onAddAsActivity(selectedDayId, block.value, recommendation)}
+                className="flex-1 rounded-md bg-[#f1eadb] px-2 py-1.5 text-[11px] font-bold text-[#574f42] transition hover:bg-[#315f45] hover:text-white"
+              >
+                {getTimeBlockLabel(block.value, locale)}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
+function SearchPlacesSection({
+  searchResults,
+  isSearching,
+  itineraryDays,
+  locale,
+  onSearch,
+  onAddPlace,
+}: {
+  searchResults: AiSearchPlace[];
+  isSearching: boolean;
+  itineraryDays: ItineraryDay[];
+  locale: Locale;
+  onSearch: (query: string) => void;
+  onAddPlace: (dayId: string, timeBlock: TimeBlock, place: AiSearchPlace) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [selectedDayId, setSelectedDayId] = useState(itineraryDays[0]?.id ?? "");
+  const isVietnamese = locale === "vi";
+
+  return (
+    <section className="rounded-lg border border-[#d8cfbd] bg-[#fffdf8] p-4 shadow-sm">
+      <div className="flex gap-2">
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              onSearch(query);
+            }
+          }}
+          className="input flex-1"
+          placeholder={isVietnamese ? "Vd: đền chùa, ramen ngon, hoạt động gia đình..." : "E.g.: temples, best ramen, family activities..."}
+        />
+        <button
+          type="button"
+          onClick={() => onSearch(query)}
+          disabled={isSearching || !query.trim()}
+          className="rounded-lg bg-[#17211b] px-4 py-2 text-sm font-bold text-white disabled:opacity-60"
+        >
+          {isSearching ? (isVietnamese ? "Đang tìm..." : "Searching...") : isVietnamese ? "Tìm địa điểm" : "Search places"}
+        </button>
+      </div>
+
+      {searchResults.length > 0 ? (
+        <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+          {searchResults.map((place, index) => (
+            <PlaceCard
+              key={`${place.name}-${index}`}
+              place={place}
+              itineraryDays={itineraryDays}
+              selectedDayId={selectedDayId}
+              locale={locale}
+              onDayChange={setSelectedDayId}
+              onAddPlace={onAddPlace}
+            />
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function PlaceCard({
+  place,
+  itineraryDays,
+  selectedDayId,
+  locale,
+  onDayChange,
+  onAddPlace,
+}: {
+  place: AiSearchPlace;
+  itineraryDays: ItineraryDay[];
+  selectedDayId: string;
+  locale: Locale;
+  onDayChange: (dayId: string) => void;
+  onAddPlace: (dayId: string, timeBlock: TimeBlock, place: AiSearchPlace) => void;
+}) {
+  return (
+    <article className="rounded-lg border border-[#eee5d3] bg-white p-3">
+      <h4 className="text-sm font-extrabold text-[#17211b]">{place.name}</h4>
+      <p className="mt-1 text-xs leading-5 text-[#615f57]">{place.description}</p>
+      <div className="mt-2 flex flex-wrap gap-2 text-[11px] font-bold text-[#6d675c]">
+        <span className="rounded-full bg-[#f1eadb] px-2 py-0.5">{place.locationName}</span>
+        {place.estimatedCost > 0 ? (
+          <span className="rounded-full bg-[#f1eadb] px-2 py-0.5">{formatCurrency(place.estimatedCost)}</span>
+        ) : null}
+      </div>
+
+      {itineraryDays.length > 0 ? (
+        <div className="mt-3 border-t border-[#eee5d3] pt-3">
+          <select
+            value={selectedDayId}
+            onChange={(event) => onDayChange(event.target.value)}
+            className="input mb-2"
+          >
+            {itineraryDays.map((day) => (
+              <option key={day.id} value={day.id}>
+                {day.title} — {formatDate(day.date)}
+              </option>
+            ))}
+          </select>
+
+          <div className="flex gap-1">
+            {timeBlocks.map((block) => (
+              <button
+                key={block.value}
+                type="button"
+                onClick={() => onAddPlace(selectedDayId, block.value, place)}
+                className="flex-1 rounded-md bg-[#f1eadb] px-2 py-1.5 text-[11px] font-bold text-[#574f42] transition hover:bg-[#315f45] hover:text-white"
+              >
+                {getTimeBlockLabel(block.value, locale)}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
+function TripPreviewPanel({
+  draft,
+  preview,
+  locale,
+  onConfirm,
+  onCancel,
+}: {
+  draft: TripDraft;
+  preview: AiTripPreview;
+  locale: Locale;
+  onConfirm: (title: string) => void;
+  onCancel: () => void;
+}) {
+  const [title, setTitle] = useState(preview.suggestedTitle);
+  const text = uiText[locale];
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        onConfirm(title);
+      }}
+      className="m-4 max-h-[calc(100vh-14rem)] overflow-y-auto rounded-lg bg-white p-4 shadow-2xl sm:m-6 sm:p-5 lg:m-8"
+    >
+      <p className="text-xs font-bold uppercase text-[#7d776b]">{text.previewTitle}</p>
+
+      <div className="mt-4 space-y-3">
+        <label className="block">
+          <span className="mb-1.5 block text-xs font-bold uppercase text-[#756f65]">{text.previewEditTitleLabel}</span>
+          <input value={title} onChange={(e) => setTitle(e.target.value)} className="input" />
+        </label>
+
+        <label className="block">
+          <span className="mb-1.5 block text-xs font-bold uppercase text-[#756f65]">{text.destination}</span>
+          <p className="text-sm font-semibold">{draft.destination}</p>
+        </label>
+
+        <label className="block">
+          <span className="mb-1.5 block text-xs font-bold uppercase text-[#756f65]">{text.previewDestinationAbout}</span>
+          <p className="text-sm leading-5 text-[#615f57]">{preview.destinationDescription}</p>
+        </label>
+
+        <div>
+          <p className="mb-2 text-xs font-bold uppercase text-[#756f65]">{text.previewItinerary}</p>
+          <div className="max-h-64 space-y-2 overflow-y-auto">
+            {preview.itineraryPreview.map((day) => (
+              <div key={day.dayNumber} className="rounded-lg border border-[#eee5d3] bg-[#fcf9f4] p-3">
+                <p className="text-sm font-bold">
+                  {`Ngày ${day.dayNumber}`} — {formatDate(day.date)}
+                </p>
+                <p className="mt-1 text-xs leading-5 text-[#615f57]">{day.summary}</p>
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {day.activities.map((activity, i) => (
+                    <span
+                      key={i}
+                      className="rounded-full bg-[#f1eadb] px-2 py-0.5 text-[10px] font-bold text-[#574f42]"
+                    >
+                      {getTimeBlockLabel(activity.timeBlock, locale)}: {activity.title}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2 text-center text-xs font-semibold text-[#6d675c]">
+          <span>
+            {draft.startDate} - {draft.endDate}
+          </span>
+          <span>
+            {draft.adultCount + draft.childCount} {locale === "vi" ? "người" : "people"}
+          </span>
+          <span>{formatCurrency(draft.budgetAmount)}</span>
+        </div>
+      </div>
+
+      <div className="mt-5 flex gap-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="flex-1 rounded-lg border border-[#cfc5b1] px-4 py-3 text-sm font-bold"
+        >
+          {text.previewBack}
+        </button>
+        <button type="submit" className="flex-1 rounded-lg bg-[#17211b] px-4 py-3 text-sm font-bold text-white">
+          {text.previewConfirm}
+        </button>
+      </div>
+    </form>
   );
 }
 
@@ -1038,6 +1457,10 @@ function ItineraryPanel({
   onUpdateActivity,
   onDeleteActivity,
   onMoveActivity,
+  searchResults,
+  isSearchingPlaces,
+  onSearchPlaces,
+  onAddPlace,
 }: {
   trip: Trip;
   activeDay: Trip["itineraryDays"][number];
@@ -1048,6 +1471,10 @@ function ItineraryPanel({
   onUpdateActivity: (dayId: string, activityId: string, draft: ActivityDraft) => void;
   onDeleteActivity: (dayId: string, activityId: string) => void;
   onMoveActivity: (dayId: string, activityId: string, direction: -1 | 1) => void;
+  searchResults: AiSearchPlace[];
+  isSearchingPlaces: boolean;
+  onSearchPlaces: (query: string) => void;
+  onAddPlace: (dayId: string, timeBlock: TimeBlock, place: AiSearchPlace) => void;
 }) {
   return (
     <section id="planner" className="space-y-5">
@@ -1068,6 +1495,15 @@ function ItineraryPanel({
           </button>
         ))}
       </div>
+
+      <SearchPlacesSection
+        searchResults={searchResults}
+        isSearching={isSearchingPlaces}
+        itineraryDays={trip.itineraryDays}
+        locale={locale}
+        onSearch={onSearchPlaces}
+        onAddPlace={onAddPlace}
+      />
 
       <div className="grid gap-4 xl:grid-cols-2 2xl:grid-cols-4">
         {timeBlocks.map((block) => {

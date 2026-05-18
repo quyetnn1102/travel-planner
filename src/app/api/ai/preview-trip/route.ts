@@ -1,52 +1,69 @@
 import { fail, ok, readJson } from "@/server/api-response";
 import { ValidationError } from "@/server/errors";
-import { getTrip } from "@/server/travel-store";
 import { z } from "zod";
 
-type RecommendationRequest = {
-  tripId?: string;
+type PreviewRequest = {
+  draft?: Record<string, unknown>;
 };
 
-const recommendationsSchema = z.object({
-  recommendations: z
-    .array(
-      z.object({
-        title: z.string().min(1),
-        rationale: z.string().min(1),
-        priority: z.enum(["high", "medium", "low"]),
-      }),
-    )
-    .min(1)
-    .max(3),
+const previewActivitySchema = z.object({
+  title: z.string().min(1),
+  timeBlock: z.enum(["morning", "noon", "afternoon", "evening"]),
+  locationName: z.string().optional(),
+  notes: z.string().optional(),
 });
 
+const previewDaySchema = z.object({
+  dayNumber: z.number().int().min(1),
+  date: z.string(),
+  summary: z.string().min(1),
+  activities: z.array(previewActivitySchema).min(1),
+});
+
+const tripPreviewResponseSchema = z.object({
+  preview: z.object({
+    suggestedTitle: z.string().min(1),
+    destinationDescription: z.string().min(1),
+    itineraryPreview: z.array(previewDaySchema),
+  }),
+});
+
+type GeneratedPreview = z.infer<typeof tripPreviewResponseSchema>;
+
 export async function POST(request: Request) {
-  const body = (await readJson<RecommendationRequest>(request)) ?? {};
+  const body = (await readJson<PreviewRequest>(request)) ?? {};
 
   try {
-    if (!body.tripId) {
-      throw new ValidationError("Trip id is required.");
+    const draft = body.draft;
+
+    if (!draft || typeof draft !== "object") {
+      throw new ValidationError("Trip draft is required.");
     }
 
-    const trip = await getTrip(body.tripId);
-
-    if (!trip) {
-      return fail("NOT_FOUND", "Trip not found.", 404);
+    if (
+      !(draft as Record<string, unknown>).destination ||
+      String((draft as Record<string, unknown>).destination).trim().length === 0
+    ) {
+      throw new ValidationError("Destination is required.");
     }
 
     const apiKey = process.env.ANTHROPIC_API_KEY?.trim().replace(/^["']|["']$/g, "");
 
     if (!apiKey) {
-      return fail(
-        "SERVICE_UNAVAILABLE",
-        "AI recommendations are not configured. Set ANTHROPIC_API_KEY in the server environment.",
-        503,
-      );
+      return fail("SERVICE_UNAVAILABLE", "AI preview is not configured. Set ANTHROPIC_API_KEY.", 503);
     }
 
     const model = process.env.ANTHROPIC_MODEL ?? "claude-haiku-4-5-20251001";
-
     const baseUrl = process.env.ANTHROPIC_BASE_URL ?? "https://api.anthropic.com/v1";
+
+    const destination = String(draft.destination).trim();
+    const startDate = String(draft.startDate ?? "");
+    const endDate = String(draft.endDate ?? "");
+    const travelers = Number(draft.adultCount ?? 1) + Number(draft.childCount ?? 0);
+    const budgetAmount = Number(draft.budgetAmount ?? 0);
+    const travelStyles = Array.isArray(draft.travelStyles) ? draft.travelStyles : [];
+    const notes = String(draft.notes ?? "");
+
     const response = await fetch(`${baseUrl}/messages`, {
       method: "POST",
       headers: {
@@ -58,34 +75,19 @@ export async function POST(request: Request) {
         model,
         max_tokens: 2000,
         system:
-          'You are a practical travel planner for Vietnamese travelers. Return only valid JSON with this exact shape: {"recommendations":[{"title":"...","rationale":"...","priority":"high|medium|low"}]}. Provide 1 to 3 concise, actionable recommendations. Do not include any other text.',
+          'You are a Vietnamese travel planner. Generate a trip preview JSON. Return ONLY: {"preview":{"suggestedTitle":"short catchy title","destinationDescription":"1 sentence about the destination","itineraryPreview":[{"dayNumber":1,"date":"YYYY-MM-DD","summary":"1-line day summary","activities":[{"title":"short activity name","timeBlock":"morning|noon|afternoon|evening","locationName":"place name","notes":"brief tip"}]}]}}. Keep all fields concise. 1-2 activities per day. No other text.',
         messages: [
           {
             role: "user",
-            content: `Generate JSON recommendations for this trip:\n${JSON.stringify({
-              title: trip.title,
-              destination: trip.destination,
-              startDate: trip.startDate,
-              endDate: trip.endDate,
-              travelers: trip.adultCount + trip.childCount,
-              budgetAmount: trip.budgetAmount,
-              travelStyles: trip.travelStyles,
-              days: trip.itineraryDays.map((day) => ({
-                date: day.date,
-                activityCount: day.activities.length,
-                activities: day.activities.map((activity) => ({
-                  timeBlock: activity.timeBlock,
-                  title: activity.title,
-                  locationName: activity.locationName,
-                })),
-              })),
-              costs: trip.costItems.map((item) => ({
-                category: item.category,
-                name: item.name,
-                amount: item.amount,
-                quantity: item.quantity,
-              })),
-            })}`,
+            content: JSON.stringify({
+              destination,
+              startDate,
+              endDate,
+              travelers,
+              budgetAmount,
+              travelStyles,
+              notes,
+            }),
           },
         ],
       }),
@@ -94,7 +96,7 @@ export async function POST(request: Request) {
     const payload = await readAnthropicResponse(response);
 
     if (!response.ok) {
-      console.error("Anthropic recommendations request failed", {
+      console.error("Preview trip request failed", {
         status: response.status,
         errorType: payload.error?.type,
         message: payload.error?.message,
@@ -102,7 +104,7 @@ export async function POST(request: Request) {
 
       return fail(
         response.status === 401 ? "FORBIDDEN" : "BAD_REQUEST",
-        getAnthropicClientMessage(response.status, payload.error?.message),
+        `AI preview failed with status ${response.status}.`,
         response.status === 401 || response.status === 429 ? response.status : 400,
       );
     }
@@ -110,20 +112,33 @@ export async function POST(request: Request) {
     const text = getOutputText(payload);
 
     if (!text) {
-      console.error("Anthropic recommendations response did not include output text");
-      return fail("BAD_REQUEST", "Anthropic returned an empty recommendation response.", 400);
+      console.error("Preview trip response did not include output text");
+      return fail("BAD_REQUEST", "AI returned an empty preview response.", 400);
     }
 
-    const parsed = parseRecommendations(text);
+    const parsed = parsePreview(text);
 
     return ok(parsed);
   } catch (error) {
-    console.error("AI recommendations route failed", {
+    console.error("Preview trip route failed", {
       message: error instanceof Error ? error.message : String(error),
+      cause: error instanceof Error ? (error.cause as unknown) : undefined,
+      stack: error instanceof Error ? error.stack : undefined,
     });
 
     return fail("BAD_REQUEST", getAiClientErrorMessage(error));
   }
+}
+
+function parsePreview(text: string): GeneratedPreview {
+  const parsed = safeParseJson(stripJsonCodeFence(text)) as unknown;
+  const result = tripPreviewResponseSchema.safeParse(parsed);
+
+  if (!result.success) {
+    throw new ValidationError(result.error.issues[0]?.message ?? "AI preview response did not match the expected format.");
+  }
+
+  return result.data;
 }
 
 type AnthropicContentBlock =
@@ -137,17 +152,6 @@ type AnthropicResponse = {
     message?: string;
   };
 };
-
-function parseRecommendations(text: string) {
-  const parsed = safeParseJson(stripJsonCodeFence(text)) as unknown;
-  const result = recommendationsSchema.safeParse(parsed);
-
-  if (!result.success) {
-    throw new ValidationError(result.error.issues[0]?.message ?? "AI response did not match the expected format.");
-  }
-
-  return result.data;
-}
 
 function getOutputText(payload: AnthropicResponse) {
   const blocks = payload.content ?? [];
@@ -208,25 +212,9 @@ function getOutputText(payload: AnthropicResponse) {
   return fixed;
 }
 
-function getAnthropicClientMessage(status: number, upstreamMessage?: string) {
-  if (status === 401) {
-    return "Anthropic rejected the API key. Check ANTHROPIC_API_KEY in Vercel.";
-  }
-
-  if (status === 429) {
-    return "Anthropic rate limit was reached. Check your Anthropic billing and usage limits.";
-  }
-
-  if (status === 400 && upstreamMessage) {
-    return `Anthropic rejected the request: ${upstreamMessage}`;
-  }
-
-  return `Anthropic request failed with status ${status}${upstreamMessage ? `: ${upstreamMessage}` : "."}`;
-}
-
 function getAiClientErrorMessage(error: unknown) {
   if (error instanceof SyntaxError) {
-    return "Anthropic returned a response that was not valid JSON.";
+    return "AI returned a response that was not valid JSON.";
   }
 
   if (error instanceof ValidationError) {
@@ -234,23 +222,20 @@ function getAiClientErrorMessage(error: unknown) {
   }
 
   if (error instanceof Error) {
-    return `AI recommendation failed: ${truncateMessage(error.message)}`;
+    return `AI preview failed: ${truncateMessage(error.message)}`;
   }
 
-  return `AI recommendation failed with an unknown server error: ${truncateMessage(String(error))}`;
+  return `AI preview failed: ${truncateMessage(String(error))}`;
 }
 
 function safeParseJson(text: string) {
-  // First try direct parse
   try {
     return JSON.parse(text);
   } catch {
-    // noop, try recovery below
+    // noop
   }
 
-  // Try to recover truncated JSON by completing the structure
   let fixed = text.trimEnd();
-  // Count open vs close braces/brackets
   let braceCount = 0;
   let bracketCount = 0;
   let inString = false;
@@ -265,9 +250,7 @@ function safeParseJson(text: string) {
     if (ch === "[") bracketCount++;
     if (ch === "]") bracketCount--;
   }
-  // If we ended mid-string, close it
   if (inString) fixed += '"';
-  // Close any open structures
   while (bracketCount > 0) { fixed += "]"; bracketCount--; }
   while (braceCount > 0) { fixed += "}"; braceCount--; }
 
