@@ -17,10 +17,12 @@ const authPrisma = databaseUrl
 
 const googleClientId = process.env.GOOGLE_CLIENT_ID;
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+const authSecret = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET;
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: authPrisma ? PrismaAdapter(authPrisma) : undefined,
   providers: googleClientId && googleClientSecret ? [Google({ clientId: googleClientId, clientSecret: googleClientSecret })] : [],
+  secret: authSecret,
   session: {
     strategy: authPrisma ? "database" : "jwt",
   },
