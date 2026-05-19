@@ -2,7 +2,7 @@ import { fail, ok, readJson } from "@/server/api-response";
 import { generateOpenAIJson, toAiErrorResponse } from "@/server/ai/openai";
 import { ValidationError } from "@/server/errors";
 import { assertRateLimit } from "@/server/rate-limit";
-import { addActivity, getTrip } from "@/server/travel-store";
+import { addActivitiesToDays, getTrip } from "@/server/travel-store";
 import { z } from "zod";
 
 type GenerateRequest = {
@@ -12,8 +12,8 @@ type GenerateRequest = {
 const activityInputSchema = z.object({
   title: z.string().min(1),
   timeBlock: z.enum(["morning", "noon", "afternoon", "evening"]),
-  startTime: z.string().optional(),
-  endTime: z.string().optional(),
+  startTime: z.string().regex(/^$|^(?:[01]\d|2[0-3]):[0-5]\d$/).optional(),
+  endTime: z.string().regex(/^$|^(?:[01]\d|2[0-3]):[0-5]\d$/).optional(),
   locationName: z.string().optional(),
   estimatedCost: z.number().min(0).optional(),
   notes: z.string().optional(),
@@ -62,6 +62,13 @@ export async function POST(request: Request) {
     });
 
     const dayMap = new Map(trip.itineraryDays.map((day) => [day.dayNumber, day]));
+    const existingTitlesByDay = new Map(
+      trip.itineraryDays.map((day) => [
+        day.dayNumber,
+        new Set(day.activities.map((activity) => normalizeTitle(activity.title))),
+      ]),
+    );
+    const activityInputs: Array<{ dayId: string; input: z.infer<typeof activityInputSchema> }> = [];
     const added: Array<{ dayNumber: number; title: string; timeBlock: string }> = [];
 
     for (const dayPlan of generated.days) {
@@ -72,15 +79,26 @@ export async function POST(request: Request) {
       }
 
       for (const activity of dayPlan.activities) {
-        await addActivity(day.id, {
-          title: activity.title,
-          timeBlock: activity.timeBlock,
-          startTime: activity.startTime ?? "",
-          endTime: activity.endTime ?? "",
-          locationName: activity.locationName ?? "",
-          address: "",
-          estimatedCost: activity.estimatedCost ?? 0,
-          notes: activity.notes ?? "",
+        const normalizedTitle = normalizeTitle(activity.title);
+        const existingTitles = existingTitlesByDay.get(dayPlan.dayNumber) ?? new Set<string>();
+
+        if (existingTitles.has(normalizedTitle)) {
+          continue;
+        }
+
+        existingTitles.add(normalizedTitle);
+        existingTitlesByDay.set(dayPlan.dayNumber, existingTitles);
+        activityInputs.push({
+          dayId: day.id,
+          input: {
+            title: activity.title,
+            timeBlock: activity.timeBlock,
+            startTime: activity.startTime ?? "",
+            endTime: activity.endTime ?? "",
+            locationName: activity.locationName ?? "",
+            estimatedCost: activity.estimatedCost ?? 0,
+            notes: activity.notes ?? "",
+          },
         });
 
         added.push({
@@ -91,9 +109,24 @@ export async function POST(request: Request) {
       }
     }
 
+    const created = await addActivitiesToDays(
+      activityInputs.map((item) => ({
+        dayId: item.dayId,
+        input: { ...item.input, address: "" },
+      })),
+    );
+
+    if (!created) {
+      return fail("NOT_FOUND", "Itinerary day not found.", 404);
+    }
+
     return ok({ added });
   } catch (error) {
     const response = toAiErrorResponse(error);
     return fail(response.code, response.message, response.status);
   }
+}
+
+function normalizeTitle(title: string) {
+  return title.trim().toLocaleLowerCase("vi");
 }

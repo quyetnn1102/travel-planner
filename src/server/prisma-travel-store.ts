@@ -352,6 +352,95 @@ export async function addActivity(dayId: string, input: unknown) {
   return mapActivity(activity);
 }
 
+export async function addActivitiesToDays(items: Array<{ dayId: string; input: unknown }>) {
+  if (items.length === 0) {
+    return [];
+  }
+
+  const userId = await getScopedUserId();
+  const dayIds = Array.from(new Set(items.map((item) => item.dayId)));
+  const days = await prisma.itineraryDay.findMany({
+    where: { id: { in: dayIds }, trip: { userId } },
+  });
+  const daysById = new Map(days.map((day) => [day.id, day]));
+
+  if (daysById.size !== dayIds.length) {
+    return null;
+  }
+
+  const payloads = items.map((item) => {
+    const payload = parseActivityInput(item.input);
+
+    if (!payload.title?.trim()) {
+      throw new Error("Activity title is required.");
+    }
+
+    return {
+      day: daysById.get(item.dayId),
+      payload,
+      timeBlock: payload.timeBlock ?? "morning",
+    };
+  });
+
+  const existingActivities = await prisma.activity.findMany({
+    where: { itineraryDayId: { in: dayIds } },
+    select: { itineraryDayId: true, timeBlock: true },
+  });
+  const sortOrders = new Map<string, number>();
+
+  for (const activity of existingActivities) {
+    const sortKey = `${activity.itineraryDayId}:${activity.timeBlock}`;
+    sortOrders.set(sortKey, (sortOrders.get(sortKey) ?? 0) + 1);
+  }
+
+  const createItems = payloads.map((item) => {
+    if (!item.day) {
+      throw new Error("Itinerary day not found.");
+    }
+
+    const dbTimeBlock = timeBlockToDb[item.timeBlock];
+    const sortKey = `${item.day.id}:${dbTimeBlock}`;
+    const sortOrder = sortOrders.get(sortKey) ?? 0;
+    sortOrders.set(sortKey, sortOrder + 1);
+
+    return {
+      day: item.day,
+      data: {
+        id: createId("activity"),
+        itineraryDayId: item.day.id,
+        timeBlock: dbTimeBlock,
+        title: item.payload.title?.trim() ?? "",
+        startTime: toTime(item.payload.startTime),
+        endTime: toTime(item.payload.endTime),
+        locationName: item.payload.locationName ?? "",
+        address: item.payload.address ?? "",
+        estimatedCost: Math.max(0, item.payload.estimatedCost ?? 0),
+        notes: item.payload.notes ?? "",
+        sortOrder,
+      },
+    };
+  });
+
+  const created = await prisma.$transaction(async (tx) => {
+    const activities = [];
+
+    for (const item of createItems) {
+      activities.push(await tx.activity.create({ data: item.data }));
+    }
+
+    for (const tripId of new Set(createItems.map((item) => item.day.tripId))) {
+      await tx.trip.update({
+        where: { id: tripId },
+        data: { updatedAt: new Date() },
+      });
+    }
+
+    return activities;
+  });
+
+  return created.map(mapActivity);
+}
+
 export async function patchActivity(activityId: string, input: unknown) {
   const userId = await getScopedUserId();
   const activity = await prisma.activity.findFirst({

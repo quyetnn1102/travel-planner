@@ -55,6 +55,10 @@ export async function addActivity(dayId: string, input: unknown) {
   return (await activeStore()).addActivity(dayId, input);
 }
 
+export async function addActivitiesToDays(items: Array<{ dayId: string; input: unknown }>) {
+  return (await activeStore()).addActivitiesToDays(items);
+}
+
 export async function patchActivity(activityId: string, input: unknown) {
   return (await activeStore()).patchActivity(activityId, input);
 }

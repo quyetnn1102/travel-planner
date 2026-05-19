@@ -7,7 +7,10 @@ const timeBlockValues = timeBlocks.map((block) => block.value) as [
   ...(typeof timeBlocks)[number]["value"][],
 ];
 
-const optionalTimeSchema = z.string().regex(/^$|^\d{2}:\d{2}$/, "Time must use HH:mm.").optional();
+const optionalTimeSchema = z
+  .string()
+  .regex(/^$|^(?:[01]\d|2[0-3]):[0-5]\d$/, "Time must use HH:mm.")
+  .optional();
 
 export const activityInputSchema = z.object({
   timeBlock: z.enum(timeBlockValues).optional(),

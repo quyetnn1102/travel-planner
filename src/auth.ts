@@ -30,6 +30,24 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   session: {
     strategy: authPrisma ? "database" : "jwt",
   },
+  callbacks: {
+    jwt({ token, user }) {
+      if (user?.id) {
+        token.id = user.id;
+      }
+
+      return token;
+    },
+    session({ session, token, user }) {
+      const userId = user?.id ?? (typeof token?.id === "string" ? token.id : undefined);
+
+      if (userId) {
+        session.user.id = userId;
+      }
+
+      return session;
+    },
+  },
   trustHost: true,
 });
 

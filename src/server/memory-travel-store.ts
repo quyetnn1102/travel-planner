@@ -153,6 +153,80 @@ export function addActivity(dayId: string, input: unknown) {
   return activity;
 }
 
+export function addActivitiesToDays(items: Array<{ dayId: string; input: unknown }>) {
+  const prepared = items.map((item) => {
+    const location = findDay(item.dayId);
+
+    if (!location) {
+      return null;
+    }
+
+    const payload = parseActivityInput(item.input);
+
+    if (!payload.title?.trim()) {
+      throw new Error("Activity title is required.");
+    }
+
+    return {
+      location,
+      payload,
+      timeBlock: payload.timeBlock ?? "morning",
+    };
+  });
+
+  if (prepared.some((item) => item === null)) {
+    return null;
+  }
+
+  const sortOrders = new Map<string, number>();
+
+  for (const item of prepared) {
+    if (!item) {
+      continue;
+    }
+
+    const sortKey = `${item.location.day.id}:${item.timeBlock}`;
+
+    if (!sortOrders.has(sortKey)) {
+      sortOrders.set(
+        sortKey,
+        item.location.day.activities.filter((activity) => activity.timeBlock === item.timeBlock).length,
+      );
+    }
+  }
+
+  const activities = prepared.map((item) => {
+    if (!item) {
+      throw new Error("Itinerary day not found.");
+    }
+
+    const sortKey = `${item.location.day.id}:${item.timeBlock}`;
+    const sortOrder = sortOrders.get(sortKey) ?? 0;
+    sortOrders.set(sortKey, sortOrder + 1);
+
+    return {
+      tripId: item.location.trip.id,
+      dayId: item.location.day.id,
+      activity: createActivity(item.location.day.id, item.payload, item.timeBlock, sortOrder),
+    };
+  });
+
+  for (const group of groupActivitiesByTrip(activities)) {
+    mutateTrip(group.tripId, (trip) => ({
+      ...trip,
+      itineraryDays: trip.itineraryDays.map((day) => {
+        const dayActivities = group.activities.filter((item) => item.dayId === day.id);
+
+        return dayActivities.length > 0
+          ? { ...day, activities: [...day.activities, ...dayActivities.map((item) => item.activity)] }
+          : day;
+      }),
+    }));
+  }
+
+  return activities.map((item) => item.activity);
+}
+
 export function patchActivity(activityId: string, input: unknown) {
   const location = findActivity(activityId);
 
@@ -519,6 +593,34 @@ function parseChecklistInput(input: unknown): ChecklistInput {
     isDone: typeof payload.isDone === "boolean" ? payload.isDone : undefined,
     category: toStringValue(payload.category, undefined),
   };
+}
+
+function createActivity(dayId: string, payload: ActivityInput, timeBlock: TimeBlock, sortOrder: number): Activity {
+  return {
+    id: createId("activity"),
+    itineraryDayId: dayId,
+    timeBlock,
+    title: payload.title?.trim() ?? "",
+    startTime: payload.startTime ?? "",
+    endTime: payload.endTime ?? "",
+    locationName: payload.locationName ?? "",
+    address: payload.address ?? "",
+    estimatedCost: Math.max(0, payload.estimatedCost ?? 0),
+    notes: payload.notes ?? "",
+    sortOrder,
+  };
+}
+
+function groupActivitiesByTrip(
+  activities: Array<{ tripId: string; dayId: string; activity: Activity }>,
+) {
+  const groups = new Map<string, Array<{ dayId: string; activity: Activity }>>();
+
+  for (const item of activities) {
+    groups.set(item.tripId, [...(groups.get(item.tripId) ?? []), { dayId: item.dayId, activity: item.activity }]);
+  }
+
+  return Array.from(groups, ([tripId, groupActivities]) => ({ tripId, activities: groupActivities }));
 }
 
 function findDay(dayId: string) {

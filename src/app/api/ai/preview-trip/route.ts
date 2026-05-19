@@ -2,6 +2,7 @@ import { fail, ok, readJson } from "@/server/api-response";
 import { generateOpenAIJson, toAiErrorResponse } from "@/server/ai/openai";
 import { ValidationError } from "@/server/errors";
 import { assertRateLimit } from "@/server/rate-limit";
+import { requireCurrentUser } from "@/server/auth";
 import { z } from "zod";
 
 type PreviewRequest = {
@@ -34,6 +35,7 @@ export async function POST(request: Request) {
   const body = (await readJson<PreviewRequest>(request)) ?? {};
 
   try {
+    await requireCurrentUser();
     assertRateLimit(request, "ai:preview", 10);
 
     const draft = body.draft;

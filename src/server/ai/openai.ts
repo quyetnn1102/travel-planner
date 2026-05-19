@@ -89,6 +89,10 @@ export async function generateOpenAIJson<T>({
 }
 
 export function toAiErrorResponse(error: unknown) {
+  if (error instanceof Error && error.name === "AuthenticationError") {
+    return { code: "UNAUTHORIZED" as const, message: error.message, status: 401 };
+  }
+
   if (error instanceof AiConfigurationError) {
     return { code: "SERVICE_UNAVAILABLE" as const, message: error.message, status: 503 };
   }
