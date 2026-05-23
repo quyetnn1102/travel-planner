@@ -7,9 +7,11 @@ import { useState } from "react";
 export function SignInPanel({
   hasGoogleProvider,
   hasAuthSecret,
+  callbackUrl,
 }: {
   hasGoogleProvider: boolean;
   hasAuthSecret: boolean;
+  callbackUrl: string;
 }) {
   const [isLoading, setIsLoading] = useState(false);
   const canSignIn = hasGoogleProvider && hasAuthSecret;
@@ -35,7 +37,7 @@ export function SignInPanel({
           disabled={!canSignIn || isLoading}
           onClick={() => {
             setIsLoading(true);
-            void signIn("google", { callbackUrl: "/" });
+            void signIn("google", { callbackUrl });
           }}
           className="mt-5 flex w-full items-center justify-center rounded-lg bg-[#17211b] px-5 py-3 text-sm font-extrabold text-white disabled:cursor-not-allowed disabled:opacity-60"
         >

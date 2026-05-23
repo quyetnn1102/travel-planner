@@ -1,5 +1,6 @@
 import { fail, ok, readJson } from "@/server/api-response";
 import { generateOpenAIJson, toAiErrorResponse } from "@/server/ai/openai";
+import { requireCurrentUser } from "@/server/auth";
 import { ValidationError } from "@/server/errors";
 import { assertRateLimit } from "@/server/rate-limit";
 import { getTrip } from "@/server/travel-store";
@@ -26,7 +27,8 @@ export async function POST(request: Request) {
   const body = (await readJson<RecommendationRequest>(request)) ?? {};
 
   try {
-    assertRateLimit(request, "ai:recommendations", 10);
+    const user = await requireCurrentUser();
+    await assertRateLimit(request, "ai:recommendations", 10, 60_000, user.id);
 
     if (!body.tripId) {
       throw new ValidationError("Trip id is required.");
@@ -40,6 +42,7 @@ export async function POST(request: Request) {
 
     const result = await generateOpenAIJson({
       schema: recommendationsSchema,
+      schemaName: "trip_recommendations",
       maxOutputTokens: 900,
       instructions:
         'You are a practical travel planner for Vietnamese travelers. Return only JSON with this exact shape: {"recommendations":[{"title":"...","rationale":"...","priority":"high|medium|low"}]}. Provide 1 to 3 concise, actionable recommendations.',

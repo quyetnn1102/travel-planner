@@ -18,6 +18,7 @@ type ApiResult<T> = {
 
 type ApiError = {
   error?: {
+    code?: string;
     message?: string;
   };
 };
@@ -54,6 +55,18 @@ export type CurrentUser = {
   authMode: "authjs" | "development-stub";
 };
 
+export class ApiRequestError extends Error {
+  readonly status: number;
+  readonly code?: string;
+
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.name = "ApiRequestError";
+    this.status = status;
+    this.code = code;
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     cache: "no-store",
@@ -67,7 +80,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok || !payload || !("data" in payload)) {
     const message = payload && "error" in payload ? payload.error?.message : undefined;
-    throw new Error(message ?? "Không thể lưu thay đổi. Vui lòng thử lại.");
+    const code = payload && "error" in payload ? payload.error?.code : undefined;
+    throw new ApiRequestError(
+      message ?? "Could not save changes. Please try again.",
+      response.status,
+      code,
+    );
   }
 
   return payload.data;

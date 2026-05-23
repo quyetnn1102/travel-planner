@@ -1,5 +1,6 @@
 import { fail, ok, readJson } from "@/server/api-response";
 import { generateOpenAIJson, toAiErrorResponse } from "@/server/ai/openai";
+import { requireCurrentUser } from "@/server/auth";
 import { ValidationError } from "@/server/errors";
 import { assertRateLimit } from "@/server/rate-limit";
 import { addActivitiesToDays, getTrip } from "@/server/travel-store";
@@ -32,7 +33,8 @@ export async function POST(request: Request) {
   const body = (await readJson<GenerateRequest>(request)) ?? {};
 
   try {
-    assertRateLimit(request, "ai:generate-itinerary", 5);
+    const user = await requireCurrentUser();
+    await assertRateLimit(request, "ai:generate-itinerary", 5, 60_000, user.id);
 
     if (!body.tripId) {
       throw new ValidationError("Trip id is required.");
@@ -46,6 +48,7 @@ export async function POST(request: Request) {
 
     const generated = await generateOpenAIJson({
       schema: generateResponseSchema,
+      schemaName: "generated_itinerary",
       maxOutputTokens: 3000,
       instructions:
         'You are a practical travel planner for Vietnamese travelers. Return only JSON with this exact shape: {"days":[{"dayNumber":1,"activities":[{"title":"...","timeBlock":"morning|noon|afternoon|evening","locationName":"...","notes":"...","estimatedCost":0}]}]}. Provide 2-4 realistic activities per day with practical Vietnamese notes.',

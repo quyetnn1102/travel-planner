@@ -35,8 +35,8 @@ export async function POST(request: Request) {
   const body = (await readJson<PreviewRequest>(request)) ?? {};
 
   try {
-    await requireCurrentUser();
-    assertRateLimit(request, "ai:preview", 10);
+    const user = await requireCurrentUser();
+    await assertRateLimit(request, "ai:preview", 10, 60_000, user.id);
 
     const draft = body.draft;
 
@@ -50,6 +50,7 @@ export async function POST(request: Request) {
 
     const result = await generateOpenAIJson({
       schema: tripPreviewResponseSchema,
+      schemaName: "trip_preview",
       maxOutputTokens: 2200,
       instructions:
         'You are a Vietnamese travel planner. Return only JSON with this exact shape: {"preview":{"suggestedTitle":"short catchy title","destinationDescription":"1 sentence","itineraryPreview":[{"dayNumber":1,"date":"YYYY-MM-DD","summary":"1-line day summary","activities":[{"title":"short activity name","timeBlock":"morning|noon|afternoon|evening","locationName":"place name","notes":"brief tip"}]}]}}. Keep fields concise. Include 1-2 activities per day.',

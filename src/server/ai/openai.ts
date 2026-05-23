@@ -6,6 +6,7 @@ type OpenAIResponse = {
     content?: Array<{
       text?: string;
       output_text?: string;
+      refusal?: string;
     }>;
   }>;
   error?: {
@@ -15,6 +16,20 @@ type OpenAIResponse = {
   };
 };
 
+type JsonSchema = {
+  type?: string;
+  properties?: Record<string, JsonSchema>;
+  required?: string[];
+  additionalProperties?: boolean;
+  items?: JsonSchema;
+  anyOf?: JsonSchema[];
+  oneOf?: JsonSchema[];
+  allOf?: JsonSchema[];
+  [key: string]: unknown;
+};
+
+export const DEFAULT_OPENAI_MODEL = "gpt-4o-mini";
+
 export class AiConfigurationError extends Error {
   constructor(message = "AI is not configured. Set OPENAI_API_KEY in the server environment.") {
     super(message);
@@ -23,22 +38,24 @@ export class AiConfigurationError extends Error {
 }
 
 export class AiProviderError extends Error {
-  constructor(
-    message: string,
-    readonly status = 400,
-  ) {
+  readonly status: number;
+
+  constructor(message: string, status = 400) {
     super(message);
     this.name = "AiProviderError";
+    this.status = status;
   }
 }
 
 export async function generateOpenAIJson<T>({
   schema,
+  schemaName,
   instructions,
   input,
   maxOutputTokens = 1600,
 }: {
   schema: z.ZodType<T>;
+  schemaName: string;
   instructions: string;
   input: unknown;
   maxOutputTokens?: number;
@@ -56,11 +73,16 @@ export async function generateOpenAIJson<T>({
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
+      model: process.env.OPENAI_MODEL ?? DEFAULT_OPENAI_MODEL,
       max_output_tokens: maxOutputTokens,
       instructions,
       text: {
-        format: { type: "json_object" },
+        format: {
+          type: "json_schema",
+          name: schemaName,
+          schema: toStrictJsonSchema(schema),
+          strict: true,
+        },
       },
       input: `Return JSON for this request:\n${JSON.stringify(input)}`,
     }),
@@ -75,6 +97,12 @@ export async function generateOpenAIJson<T>({
   const outputText = getOutputText(payload);
 
   if (!outputText) {
+    const refusal = getRefusal(payload);
+
+    if (refusal) {
+      throw new AiProviderError(truncateMessage(refusal));
+    }
+
     throw new AiProviderError("OpenAI returned an empty response.");
   }
 
@@ -127,6 +155,13 @@ function getOutputText(payload: OpenAIResponse) {
     .find((text) => typeof text === "string" && text.trim().length > 0);
 }
 
+function getRefusal(payload: OpenAIResponse) {
+  return payload.output
+    ?.flatMap((item) => item.content ?? [])
+    .map((item) => item.refusal)
+    .find((refusal) => typeof refusal === "string" && refusal.trim().length > 0);
+}
+
 async function readOpenAIResponse(response: Response): Promise<OpenAIResponse> {
   const text = await response.text();
 
@@ -170,4 +205,38 @@ function getOpenAIClientMessage(status: number, upstreamMessage?: string) {
 
 function truncateMessage(message: string) {
   return message.length > 240 ? `${message.slice(0, 240)}...` : message;
+}
+
+function toStrictJsonSchema(schema: z.ZodType<unknown>) {
+  return makeStrictJsonSchema(z.toJSONSchema(schema) as JsonSchema);
+}
+
+function makeStrictJsonSchema(schema: JsonSchema): JsonSchema {
+  const next: JsonSchema = { ...schema };
+
+  if (next.type === "object" && next.properties) {
+    next.additionalProperties = false;
+    next.required = Object.keys(next.properties);
+    next.properties = Object.fromEntries(
+      Object.entries(next.properties).map(([key, value]) => [key, makeStrictJsonSchema(value)]),
+    );
+  }
+
+  if (next.items) {
+    next.items = makeStrictJsonSchema(next.items);
+  }
+
+  if (next.anyOf) {
+    next.anyOf = next.anyOf.map(makeStrictJsonSchema);
+  }
+
+  if (next.oneOf) {
+    next.oneOf = next.oneOf.map(makeStrictJsonSchema);
+  }
+
+  if (next.allOf) {
+    next.allOf = next.allOf.map(makeStrictJsonSchema);
+  }
+
+  return next;
 }
