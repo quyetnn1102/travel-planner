@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import type { Trip } from "@/lib/travel";
 import { buildPartnerLinks } from "@/lib/integrations";
 import type { Locale } from "@/lib/i18n";
@@ -53,17 +53,20 @@ export function BookingPanel({ trip, locale }: { trip: Trip; locale: Locale }) {
   );
 }
 
-export function SharePanel({ trip, onToggle }: { trip: Trip; onToggle: () => void }) {
+export function SharePanel({ trip, locale, onToggle }: { trip: Trip; locale: Locale; onToggle: () => void }) {
   const [copyStatus, setCopyStatus] = useState("");
+  const isVietnamese = locale === "vi";
   const shareUrl = trip.share ? `/shared/${trip.share.token}` : "";
 
   return (
     <section id="share" className="max-w-3xl rounded-lg border border-[#e3dac8] bg-[#fffdf8] p-5 shadow-sm">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h3 className="text-xl font-bold">Link chia sẻ chỉ xem</h3>
+          <h3 className="text-xl font-bold">{isVietnamese ? "Link chia se chi xem" : "View-only share link"}</h3>
           <p className="mt-2 text-sm leading-6 text-[#6d675c]">
-            Người nhận link có thể xem lịch trình, chi phí và checklist. Thông tin cá nhân không hiển thị trên trang công khai.
+            {isVietnamese
+              ? "Nguoi nhan link co the xem lich trinh, chi phi va checklist. Thong tin ca nhan khong hien thi tren trang cong khai."
+              : "Anyone with the link can view the itinerary, costs, and checklist. Personal account details are not shown on the public page."}
           </p>
         </div>
         <button
@@ -73,14 +76,14 @@ export function SharePanel({ trip, onToggle }: { trip: Trip; onToggle: () => voi
             trip.share?.isEnabled ? "bg-[#fee8df] text-[#9b3519]" : "bg-[#17211b] text-white"
           }`}
         >
-          {trip.share?.isEnabled ? "Tắt link" : "Bật link"}
+          {trip.share?.isEnabled ? (isVietnamese ? "Tat link" : "Disable link") : isVietnamese ? "Bat link" : "Enable link"}
         </button>
       </div>
 
       {trip.share ? (
         <div className="mt-5 rounded-lg border border-[#eee5d3] bg-white p-3">
           <p className="text-xs font-bold uppercase text-[#756f65]">
-            Trạng thái: {trip.share.isEnabled ? "đang bật" : "đang tắt"}
+            {isVietnamese ? "Trang thai" : "Status"}: {trip.share.isEnabled ? (isVietnamese ? "dang bat" : "enabled") : isVietnamese ? "dang tat" : "disabled"}
           </p>
           <div className="mt-3 flex flex-col gap-2 sm:flex-row">
             <input readOnly value={shareUrl} className="input flex-1" />
@@ -89,7 +92,7 @@ export function SharePanel({ trip, onToggle }: { trip: Trip; onToggle: () => voi
               disabled={!trip.share.isEnabled}
               onClick={async () => {
                 await navigator.clipboard.writeText(`${window.location.origin}${shareUrl}`);
-                setCopyStatus("Đã copy link");
+                setCopyStatus(isVietnamese ? "Da copy link" : "Link copied");
               }}
               className="rounded-lg bg-[#315f45] px-4 py-3 text-sm font-bold text-white disabled:opacity-50"
             >
@@ -100,7 +103,7 @@ export function SharePanel({ trip, onToggle }: { trip: Trip; onToggle: () => voi
         </div>
       ) : (
         <p className="mt-5 rounded-lg border border-dashed border-[#d4c9b5] px-4 py-6 text-center text-sm font-semibold text-[#776f61]">
-          Chưa tạo link chia sẻ.
+          {isVietnamese ? "Chua tao link chia se." : "No share link created yet."}
         </p>
       )}
     </section>

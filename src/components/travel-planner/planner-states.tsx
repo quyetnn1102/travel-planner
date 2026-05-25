@@ -1,12 +1,14 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 import type { Locale } from "@/lib/i18n";
 import { uiText } from "@/lib/i18n";
 
-export function EmptyState() {
+export function EmptyState({ locale }: { locale: Locale }) {
+  const text = uiText[locale];
+
   return (
     <section className="rounded-lg border border-[#e3dac8] bg-[#fffdf8] p-10 text-center shadow-sm">
-      <h2 className="text-2xl font-bold">Chưa có chuyến đi</h2>
-      <p className="mt-2 text-sm font-medium text-[#6d675c]">Tạo chuyến đi đầu tiên từ khung tìm kiếm phía trên.</p>
+      <h2 className="text-2xl font-bold">{text.emptyTitle}</h2>
+      <p className="mt-2 text-sm font-medium text-[#6d675c]">{text.emptyBody}</p>
     </section>
   );
 }

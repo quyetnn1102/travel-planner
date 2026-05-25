@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import type { ItineraryDay, Trip, TripDraft, TimeBlock } from "@/lib/travel";
 import { calculateCostSummary, formatCurrency, formatDate, timeBlocks } from "@/lib/travel";
 import type { AiRecommendation } from "@/lib/ai-recommendations";
@@ -139,6 +139,7 @@ export function TripEditPanel({
     travelStyles: trip.travelStyles,
     notes: trip.notes,
   });
+  const text = uiText[locale];
 
   return (
     <form
@@ -149,17 +150,17 @@ export function TripEditPanel({
       className="rounded-lg border border-[#e3dac8] bg-[#fffdf8] p-4 shadow-sm"
     >
       <div className="grid gap-3 md:grid-cols-2">
-        <Field label="Tên chuyến đi">
+        <Field label={text.tripName}>
           <input value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} className="input" />
         </Field>
-        <Field label="Điểm đến">
+        <Field label={text.destination}>
           <input
             value={draft.destination}
             onChange={(event) => setDraft({ ...draft, destination: event.target.value })}
             className="input"
           />
         </Field>
-        <Field label="Bắt đầu">
+        <Field label={text.startDate}>
           <input
             type="date"
             value={draft.startDate}
@@ -167,7 +168,7 @@ export function TripEditPanel({
             className="input"
           />
         </Field>
-        <Field label="Kết thúc">
+        <Field label={text.endDate}>
           <input
             type="date"
             value={draft.endDate}
@@ -175,7 +176,7 @@ export function TripEditPanel({
             className="input"
           />
         </Field>
-        <Field label="Người lớn">
+        <Field label={text.adults}>
           <input
             type="number"
             min={1}
@@ -184,7 +185,7 @@ export function TripEditPanel({
             className="input"
           />
         </Field>
-        <Field label="Trẻ em">
+        <Field label={text.children}>
           <input
             type="number"
             min={0}
@@ -193,7 +194,7 @@ export function TripEditPanel({
             className="input"
           />
         </Field>
-        <Field label="Ngân sách VND">
+        <Field label={`${text.budget} VND`}>
           <input
             type="number"
             min={0}
@@ -202,7 +203,7 @@ export function TripEditPanel({
             className="input"
           />
         </Field>
-        <Field label="Ghi chú">
+        <Field label={locale === "vi" ? "Ghi chu" : "Notes"}>
           <textarea
             value={draft.notes}
             onChange={(event) => setDraft({ ...draft, notes: event.target.value })}
@@ -219,10 +220,10 @@ export function TripEditPanel({
       </div>
       <div className="mt-4 flex justify-end gap-2">
         <button type="button" onClick={onCancel} className="rounded-lg border border-[#cfc5b1] bg-white px-4 py-2 text-sm font-bold">
-          Hủy
+          {locale === "vi" ? "Huy" : "Cancel"}
         </button>
         <button type="submit" className="rounded-lg bg-[#17211b] px-4 py-2 text-sm font-bold text-white">
-          Lưu thay đổi
+          {locale === "vi" ? "Luu thay doi" : "Save changes"}
         </button>
       </div>
     </form>
@@ -279,10 +280,10 @@ export function AiRecommendationsPanel({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-xs font-bold uppercase text-[#756f65]">
-            {isVietnamese ? "AI gợi ý" : "AI recommendations"}
+            {isVietnamese ? "AI gá»£i Ã½" : "AI recommendations"}
           </p>
           <h3 className="mt-1 text-lg font-extrabold">
-            {isVietnamese ? "Nhận gợi ý tối ưu lịch trình" : "Get trip optimization ideas"}
+            {isVietnamese ? "Nháº­n gá»£i Ã½ tá»‘i Æ°u lá»‹ch trÃ¬nh" : "Get trip optimization ideas"}
           </h3>
         </div>
         <button
@@ -291,7 +292,7 @@ export function AiRecommendationsPanel({
           disabled={isLoading}
           className="rounded-lg bg-[#17211b] px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {isLoading ? (isVietnamese ? "Đang tạo..." : "Generating...") : isVietnamese ? "Tạo gợi ý" : "Generate"}
+          {isLoading ? (isVietnamese ? "Äang táº¡o..." : "Generating...") : isVietnamese ? "Táº¡o gá»£i Ã½" : "Generate"}
         </button>
       </div>
 
@@ -336,7 +337,7 @@ export function RecommendationCard({
       {itineraryDays.length > 0 ? (
         <div className="mt-3 border-t border-[#eee5d3] pt-3">
           <label className="mb-2 block text-xs font-bold uppercase text-[#756f65]">
-            {locale === "vi" ? "Chọn ngày" : "Select day"}
+            {locale === "vi" ? "Chá»n ngÃ y" : "Select day"}
           </label>
           <select
             value={selectedDayId}
@@ -345,7 +346,7 @@ export function RecommendationCard({
           >
             {itineraryDays.map((day) => (
               <option key={day.id} value={day.id}>
-                {day.title} — {formatDate(day.date)}
+                {day.title} â€” {formatDate(day.date)}
               </option>
             ))}
           </select>

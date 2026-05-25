@@ -675,6 +675,7 @@ export function TravelPlannerApp() {
             {activeTab === "checklist" ? (
               <ChecklistPanel
                 trip={selectedTrip}
+                locale={locale}
                 onAdd={addChecklist}
                 onUpdate={updateChecklist}
                 onToggle={toggleChecklist}
@@ -684,10 +685,10 @@ export function TravelPlannerApp() {
 
             {activeTab === "booking" ? <BookingPanel trip={selectedTrip} locale={locale} /> : null}
 
-            {activeTab === "share" ? <SharePanel trip={selectedTrip} onToggle={toggleShare} /> : null}
+            {activeTab === "share" ? <SharePanel trip={selectedTrip} locale={locale} onToggle={toggleShare} /> : null}
           </section>
         ) : currentUser ? (
-          <EmptyState />
+          <EmptyState locale={locale} />
         ) : (
           <GuestDashboardState locale={locale} />
         )}

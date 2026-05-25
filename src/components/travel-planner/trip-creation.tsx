@@ -213,7 +213,7 @@ export function TripPreviewPanel({
             {preview.itineraryPreview.map((day) => (
               <div key={day.dayNumber} className="rounded-lg border border-[#eee5d3] bg-[#fcf9f4] p-3">
                 <p className="text-sm font-bold">
-                  {`Ngày ${day.dayNumber}`} — {formatDate(day.date)}
+                  {`${locale === "vi" ? "Ngày" : "Day"} ${day.dayNumber}`} - {formatDate(day.date)}
                 </p>
                 <p className="mt-1 text-xs leading-5 text-[#615f57]">{day.summary}</p>
                 <div className="mt-2 flex flex-wrap gap-1">
@@ -294,4 +294,3 @@ export function StylePicker({
     </fieldset>
   );
 }
-

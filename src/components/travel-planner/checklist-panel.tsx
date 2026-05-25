@@ -1,15 +1,17 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import type { ChecklistItem, Trip } from "@/lib/travel";
 import { Field } from "./shared-ui";
 
 export function ChecklistPanel({
   trip,
+  locale,
   onAdd,
   onUpdate,
   onToggle,
   onDelete,
 }: {
   trip: Trip;
+  locale: "vi" | "en";
   onAdd: (title: string) => void;
   onUpdate: (itemId: string, title: string) => void;
   onToggle: (itemId: string) => void;
@@ -18,16 +20,17 @@ export function ChecklistPanel({
   const [title, setTitle] = useState("");
   const doneCount = trip.checklistItems.filter((item) => item.isDone).length;
   const progress = Math.round((doneCount / Math.max(1, trip.checklistItems.length)) * 100);
+  const isVietnamese = locale === "vi";
 
   return (
     <section className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
       <div className="rounded-lg border border-[#e3dac8] bg-[#fffdf8] p-4 shadow-sm">
-        <h3 className="text-lg font-bold">Tiến độ chuẩn bị</h3>
+        <h3 className="text-lg font-bold">{isVietnamese ? "Tien do chuan bi" : "Preparation progress"}</h3>
         <div className="mt-4">
           <div className="flex items-center justify-between text-sm">
             <span className="font-bold">{progress}%</span>
             <span className="font-semibold text-[#6d675c]">
-              {doneCount}/{trip.checklistItems.length} mục
+              {doneCount}/{trip.checklistItems.length} {isVietnamese ? "muc" : "items"}
             </span>
           </div>
           <div className="mt-2 h-3 overflow-hidden rounded-full bg-[#eadfcb]">
@@ -42,16 +45,16 @@ export function ChecklistPanel({
           }}
           className="mt-5 space-y-3"
         >
-          <Field label="Checklist mới">
+          <Field label={isVietnamese ? "Checklist moi" : "New checklist item"}>
             <input
               value={title}
               onChange={(event) => setTitle(event.target.value)}
               className="input"
-              placeholder="Thêm mục cần chuẩn bị"
+              placeholder={isVietnamese ? "Them muc can chuan bi" : "Add something to prepare"}
             />
           </Field>
           <button type="submit" className="w-full rounded-lg bg-[#17211b] px-4 py-3 text-sm font-bold text-white">
-            Thêm checklist
+            {isVietnamese ? "Them checklist" : "Add checklist"}
           </button>
         </form>
       </div>
@@ -61,6 +64,7 @@ export function ChecklistPanel({
           <ChecklistRow
             key={item.id}
             item={item}
+            locale={locale}
             onToggle={() => onToggle(item.id)}
             onUpdate={(nextTitle) => onUpdate(item.id, nextTitle)}
             onDelete={() => onDelete(item.id)}
@@ -73,17 +77,20 @@ export function ChecklistPanel({
 
 export function ChecklistRow({
   item,
+  locale,
   onToggle,
   onUpdate,
   onDelete,
 }: {
   item: ChecklistItem;
+  locale: "vi" | "en";
   onToggle: () => void;
   onUpdate: (title: string) => void;
   onDelete: () => void;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [title, setTitle] = useState(item.title);
+  const isVietnamese = locale === "vi";
 
   return (
     <div className="flex items-center gap-3 border-b border-[#eee5d3] px-4 py-3 last:border-b-0">
@@ -99,7 +106,7 @@ export function ChecklistRow({
         >
           <input value={title} onChange={(event) => setTitle(event.target.value)} className="input" />
           <button type="submit" className="rounded-lg bg-[#17211b] px-3 py-2 text-xs font-bold text-white">
-            Lưu
+            {isVietnamese ? "Luu" : "Save"}
           </button>
         </form>
       ) : (
@@ -108,10 +115,10 @@ export function ChecklistRow({
         </p>
       )}
       <button type="button" onClick={() => setIsEditing((value) => !value)} className="text-xs font-bold text-[#315f45]">
-        Sửa
+        {isVietnamese ? "Sua" : "Edit"}
       </button>
       <button type="button" onClick={onDelete} className="text-xs font-bold text-[#a63f22]">
-        Xóa
+        {isVietnamese ? "Xoa" : "Delete"}
       </button>
     </div>
   );
