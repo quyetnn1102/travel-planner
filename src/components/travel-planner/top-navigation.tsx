@@ -1,4 +1,4 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 import { signOut } from "next-auth/react";
 import type { CurrentUser } from "@/lib/api";
 import type { Locale } from "@/lib/i18n";

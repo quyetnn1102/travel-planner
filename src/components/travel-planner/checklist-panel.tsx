@@ -25,12 +25,12 @@ export function ChecklistPanel({
   return (
     <section className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
       <div className="rounded-lg border border-[#e3dac8] bg-[#fffdf8] p-4 shadow-sm">
-        <h3 className="text-lg font-bold">{isVietnamese ? "Tien do chuan bi" : "Preparation progress"}</h3>
+        <h3 className="text-lg font-bold">{isVietnamese ? "Tiến độ chuẩn bị" : "Preparation progress"}</h3>
         <div className="mt-4">
           <div className="flex items-center justify-between text-sm">
             <span className="font-bold">{progress}%</span>
             <span className="font-semibold text-[#6d675c]">
-              {doneCount}/{trip.checklistItems.length} {isVietnamese ? "muc" : "items"}
+              {doneCount}/{trip.checklistItems.length} {isVietnamese ? "mục" : "items"}
             </span>
           </div>
           <div className="mt-2 h-3 overflow-hidden rounded-full bg-[#eadfcb]">
@@ -45,16 +45,16 @@ export function ChecklistPanel({
           }}
           className="mt-5 space-y-3"
         >
-          <Field label={isVietnamese ? "Checklist moi" : "New checklist item"}>
+          <Field label={isVietnamese ? "Checklist mới" : "New checklist item"}>
             <input
               value={title}
               onChange={(event) => setTitle(event.target.value)}
               className="input"
-              placeholder={isVietnamese ? "Them muc can chuan bi" : "Add something to prepare"}
+              placeholder={isVietnamese ? "Thêm mục cần chuẩn bị" : "Add something to prepare"}
             />
           </Field>
           <button type="submit" className="w-full rounded-lg bg-[#17211b] px-4 py-3 text-sm font-bold text-white">
-            {isVietnamese ? "Them checklist" : "Add checklist"}
+            {isVietnamese ? "Thêm checklist" : "Add checklist"}
           </button>
         </form>
       </div>
@@ -106,7 +106,7 @@ export function ChecklistRow({
         >
           <input value={title} onChange={(event) => setTitle(event.target.value)} className="input" />
           <button type="submit" className="rounded-lg bg-[#17211b] px-3 py-2 text-xs font-bold text-white">
-            {isVietnamese ? "Luu" : "Save"}
+            {isVietnamese ? "Lưu" : "Save"}
           </button>
         </form>
       ) : (
@@ -115,10 +115,10 @@ export function ChecklistRow({
         </p>
       )}
       <button type="button" onClick={() => setIsEditing((value) => !value)} className="text-xs font-bold text-[#315f45]">
-        {isVietnamese ? "Sua" : "Edit"}
+        {isVietnamese ? "Sửa" : "Edit"}
       </button>
       <button type="button" onClick={onDelete} className="text-xs font-bold text-[#a63f22]">
-        {isVietnamese ? "Xoa" : "Delete"}
+        {isVietnamese ? "Xóa" : "Delete"}
       </button>
     </div>
   );

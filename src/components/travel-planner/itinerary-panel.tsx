@@ -3,7 +3,7 @@ import type { Activity, ItineraryDay, TimeBlock, Trip } from "@/lib/travel";
 import { formatCurrency, formatDate, timeBlocks } from "@/lib/travel";
 import type { AiSearchPlace } from "@/lib/ai-recommendations";
 import type { Locale } from "@/lib/i18n";
-import { getTimeBlockLabel } from "@/lib/i18n";
+import { getTimeBlockLabel, uiText } from "@/lib/i18n";
 import type { ActivityDraft } from "./types";
 import { emptyActivityDraft } from "./defaults";
 import { activityToDraft, MiniButton } from "./shared-ui";
@@ -25,7 +25,7 @@ export function SearchPlacesSection({
 }) {
   const [query, setQuery] = useState("");
   const [selectedDayId, setSelectedDayId] = useState(itineraryDays[0]?.id ?? "");
-  const isVietnamese = locale === "vi";
+  const text = uiText[locale];
 
   return (
     <section className="rounded-lg border border-[#d8cfbd] bg-[#fffdf8] p-4 shadow-sm">
@@ -39,7 +39,7 @@ export function SearchPlacesSection({
             }
           }}
           className="input flex-1"
-          placeholder={isVietnamese ? "Vd: Ä‘á»n chÃ¹a, ramen ngon, hoáº¡t Ä‘á»™ng gia Ä‘Ã¬nh..." : "E.g.: temples, best ramen, family activities..."}
+          placeholder={text.searchPlacesPlaceholder}
         />
         <button
           type="button"
@@ -47,7 +47,7 @@ export function SearchPlacesSection({
           disabled={isSearching || !query.trim()}
           className="rounded-lg bg-[#17211b] px-4 py-2 text-sm font-bold text-white disabled:opacity-60"
         >
-          {isSearching ? (isVietnamese ? "Äang tÃ¬m..." : "Searching...") : isVietnamese ? "TÃ¬m Ä‘á»‹a Ä‘iá»ƒm" : "Search places"}
+          {isSearching ? text.searching : text.searchPlaces}
         </button>
       </div>
 
@@ -200,7 +200,7 @@ export function ItineraryPanel({
                 <div className="flex items-center justify-between">
                   <h3 className="text-base font-bold">{getTimeBlockLabel(block.value, locale)}</h3>
                   <span className="rounded-full bg-[#f1eadb] px-2 py-1 text-xs font-bold text-[#61594a]">
-                    {activities.length} {isVietnamese ? "m?c" : "items"}
+                    {activities.length} {isVietnamese ? "mục" : "items"}
                   </span>
                 </div>
               </div>
@@ -219,7 +219,7 @@ export function ItineraryPanel({
                   ))
                 ) : (
                   <p className="rounded-lg border border-dashed border-[#d4c9b5] px-3 py-6 text-center text-sm font-medium text-[#776f61]">
-                    {isVietnamese ? "Chua có ho?t d?ng" : "No activities yet"}
+                    {isVietnamese ? "Chưa có hoạt động" : "No activities yet"}
                   </p>
                 )}
                 <ActivityForm locale={locale} onSubmit={(draft) => onAddActivity(activeDay.id, block.value, draft)} />
@@ -255,7 +255,7 @@ export function ActivityCard({
       <ActivityForm
         locale={locale}
         initialDraft={activityToDraft(activity)}
-        submitLabel={isVietnamese ? "Luu" : "Save"}
+        submitLabel={isVietnamese ? "Lưu" : "Save"}
         onCancel={() => setIsEditing(false)}
         onSubmit={(draft) => {
           onUpdate(draft);
@@ -271,12 +271,13 @@ export function ActivityCard({
         <div>
           <h4 className="text-sm font-bold leading-5">{activity.title}</h4>
           <p className="mt-1 text-xs font-semibold text-[#756f65]">
-            {[activity.startTime, activity.endTime].filter(Boolean).join(" - ") || (isVietnamese ? "Chua có gi?" : "No time set")}
+            {[activity.startTime, activity.endTime].filter(Boolean).join(" - ") ||
+              (isVietnamese ? "Chưa có giờ" : "No time set")}
           </p>
         </div>
         <div className="flex shrink-0 gap-1">
-          <MiniButton label="â†‘" onClick={onMoveUp} />
-          <MiniButton label="â†“" onClick={onMoveDown} />
+          <MiniButton label="↑" onClick={onMoveUp} />
+          <MiniButton label="↓" onClick={onMoveDown} />
         </div>
       </div>
       {activity.locationName ? <p className="mt-3 text-sm font-semibold text-[#315f45]">{activity.locationName}</p> : null}
@@ -286,7 +287,7 @@ export function ActivityCard({
       {activity.notes ? <p className="mt-2 text-xs leading-5 text-[#6b665d]">{activity.notes}</p> : null}
       <div className="mt-3 flex gap-3">
         <button type="button" onClick={() => setIsEditing(true)} className="text-xs font-bold text-[#315f45]">
-          {isVietnamese ? "S?a" : "Edit"}
+          {isVietnamese ? "Sửa" : "Edit"}
         </button>
         <button type="button" onClick={onDelete} className="text-xs font-bold text-[#a63f22]">
           {isVietnamese ? "Xóa" : "Delete"}
@@ -327,7 +328,7 @@ export function ActivityForm({
           value={draft.title}
           onChange={(event) => setDraft({ ...draft, title: event.target.value })}
           className="input"
-          placeholder={isVietnamese ? "Tên ho?t d?ng" : "Activity name"}
+          placeholder={isVietnamese ? "Tên hoạt động" : "Activity name"}
         />
         <div className="grid grid-cols-2 gap-2">
           <input
@@ -347,7 +348,7 @@ export function ActivityForm({
           value={draft.locationName}
           onChange={(event) => setDraft({ ...draft, locationName: event.target.value })}
           className="input"
-          placeholder={isVietnamese ? "Ð?a di?m / khu v?c" : "Place / area"}
+          placeholder={isVietnamese ? "Địa điểm / khu vực" : "Place / area"}
         />
         <input
           type="number"
@@ -367,7 +368,7 @@ export function ActivityForm({
       <div className="mt-3 flex justify-end gap-2">
         {onCancel ? (
           <button type="button" onClick={onCancel} className="rounded-lg border border-[#d4c9b5] px-3 py-2 text-xs font-bold">
-            {isVietnamese ? "H?y" : "Cancel"}
+            {isVietnamese ? "Hủy" : "Cancel"}
           </button>
         ) : null}
         <button type="submit" className="rounded-lg bg-[#315f45] px-3 py-2 text-xs font-bold text-white">

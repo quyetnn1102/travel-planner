@@ -62,10 +62,10 @@ export function SharePanel({ trip, locale, onToggle }: { trip: Trip; locale: Loc
     <section id="share" className="max-w-3xl rounded-lg border border-[#e3dac8] bg-[#fffdf8] p-5 shadow-sm">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h3 className="text-xl font-bold">{isVietnamese ? "Link chia se chi xem" : "View-only share link"}</h3>
+          <h3 className="text-xl font-bold">{isVietnamese ? "Link chia sẻ chỉ xem" : "View-only share link"}</h3>
           <p className="mt-2 text-sm leading-6 text-[#6d675c]">
             {isVietnamese
-              ? "Nguoi nhan link co the xem lich trinh, chi phi va checklist. Thong tin ca nhan khong hien thi tren trang cong khai."
+              ? "Người nhận link có thể xem lịch trình, chi phí và checklist. Thông tin cá nhân không hiển thị trên trang công khai."
               : "Anyone with the link can view the itinerary, costs, and checklist. Personal account details are not shown on the public page."}
           </p>
         </div>
@@ -76,14 +76,15 @@ export function SharePanel({ trip, locale, onToggle }: { trip: Trip; locale: Loc
             trip.share?.isEnabled ? "bg-[#fee8df] text-[#9b3519]" : "bg-[#17211b] text-white"
           }`}
         >
-          {trip.share?.isEnabled ? (isVietnamese ? "Tat link" : "Disable link") : isVietnamese ? "Bat link" : "Enable link"}
+          {trip.share?.isEnabled ? (isVietnamese ? "Tắt link" : "Disable link") : isVietnamese ? "Bật link" : "Enable link"}
         </button>
       </div>
 
       {trip.share ? (
         <div className="mt-5 rounded-lg border border-[#eee5d3] bg-white p-3">
           <p className="text-xs font-bold uppercase text-[#756f65]">
-            {isVietnamese ? "Trang thai" : "Status"}: {trip.share.isEnabled ? (isVietnamese ? "dang bat" : "enabled") : isVietnamese ? "dang tat" : "disabled"}
+            {isVietnamese ? "Trạng thái" : "Status"}:{" "}
+            {trip.share.isEnabled ? (isVietnamese ? "đang bật" : "enabled") : isVietnamese ? "đang tắt" : "disabled"}
           </p>
           <div className="mt-3 flex flex-col gap-2 sm:flex-row">
             <input readOnly value={shareUrl} className="input flex-1" />
@@ -92,7 +93,7 @@ export function SharePanel({ trip, locale, onToggle }: { trip: Trip; locale: Loc
               disabled={!trip.share.isEnabled}
               onClick={async () => {
                 await navigator.clipboard.writeText(`${window.location.origin}${shareUrl}`);
-                setCopyStatus(isVietnamese ? "Da copy link" : "Link copied");
+                setCopyStatus(isVietnamese ? "Đã copy link" : "Link copied");
               }}
               className="rounded-lg bg-[#315f45] px-4 py-3 text-sm font-bold text-white disabled:opacity-50"
             >
@@ -103,7 +104,7 @@ export function SharePanel({ trip, locale, onToggle }: { trip: Trip; locale: Loc
         </div>
       ) : (
         <p className="mt-5 rounded-lg border border-dashed border-[#d4c9b5] px-4 py-6 text-center text-sm font-semibold text-[#776f61]">
-          {isVietnamese ? "Chua tao link chia se." : "No share link created yet."}
+          {isVietnamese ? "Chưa tạo link chia sẻ." : "No share link created yet."}
         </p>
       )}
     </section>

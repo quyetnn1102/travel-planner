@@ -28,7 +28,7 @@ export function CostPanel({
   return (
     <section id="budget" className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
       <div className="rounded-lg border border-[#e3dac8] bg-[#fffdf8] p-4 shadow-sm">
-        <h3 className="text-lg font-bold">{isVietnamese ? "Them chi phi" : "Add cost"}</h3>
+        <h3 className="text-lg font-bold">{isVietnamese ? "Thêm chi phí" : "Add cost"}</h3>
         <form
           onSubmit={(event) => {
             event.preventDefault();
@@ -37,7 +37,7 @@ export function CostPanel({
           }}
           className="mt-4 space-y-3"
         >
-          <Field label={isVietnamese ? "Nhom chi phi" : "Cost category"}>
+          <Field label={isVietnamese ? "Nhóm chi phí" : "Cost category"}>
             <select value={draft.category} onChange={(event) => setDraft({ ...draft, category: event.target.value as CostCategory })} className="input">
               {costCategories.map((category) => (
                 <option key={category.value} value={category.value}>
@@ -46,16 +46,16 @@ export function CostPanel({
               ))}
             </select>
           </Field>
-          <Field label={isVietnamese ? "Ten chi phi" : "Cost name"}>
+          <Field label={isVietnamese ? "Tên chi phí" : "Cost name"}>
             <input
               value={draft.name}
               onChange={(event) => setDraft({ ...draft, name: event.target.value })}
               className="input"
-              placeholder={isVietnamese ? "Khach san, ve may bay..." : "Hotel, flights..."}
+              placeholder={isVietnamese ? "Khách sạn, vé máy bay..." : "Hotel, flights..."}
             />
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label={isVietnamese ? "So tien" : "Amount"}>
+            <Field label={isVietnamese ? "Số tiền" : "Amount"}>
               <input
                 type="number"
                 min={0}
@@ -64,7 +64,7 @@ export function CostPanel({
                 className="input"
               />
             </Field>
-            <Field label={isVietnamese ? "So luong" : "Quantity"}>
+            <Field label={isVietnamese ? "Số lượng" : "Quantity"}>
               <input
                 type="number"
                 min={1}
@@ -74,7 +74,7 @@ export function CostPanel({
               />
             </Field>
           </div>
-          <Field label={isVietnamese ? "Ghi chu" : "Notes"}>
+          <Field label={isVietnamese ? "Ghi chú" : "Notes"}>
             <textarea
               value={draft.notes}
               onChange={(event) => setDraft({ ...draft, notes: event.target.value })}
@@ -82,26 +82,26 @@ export function CostPanel({
             />
           </Field>
           <button type="submit" className="w-full rounded-lg bg-[#17211b] px-4 py-3 text-sm font-bold text-white">
-            {isVietnamese ? "Them chi phi" : "Add cost"}
+            {isVietnamese ? "Thêm chi phí" : "Add cost"}
           </button>
         </form>
       </div>
 
       <div className="space-y-4">
         <div className="grid gap-3 md:grid-cols-3">
-          <Metric label={isVietnamese ? "Tong chi phi" : "Total cost"} value={formatCurrency(summary.total)} />
-          <Metric label={isVietnamese ? "Theo nguoi" : "Per person"} value={formatCurrency(summary.perPerson)} />
+          <Metric label={isVietnamese ? "Tổng chi phí" : "Total cost"} value={formatCurrency(summary.total)} />
+          <Metric label={isVietnamese ? "Theo người" : "Per person"} value={formatCurrency(summary.perPerson)} />
           <Metric
-            label={isVietnamese ? "So voi ngan sach" : "Budget delta"}
+            label={isVietnamese ? "So với ngân sách" : "Budget delta"}
             value={formatCurrency(summary.budgetDelta)}
             tone={summary.isOverBudget ? "warning" : "default"}
           />
         </div>
         <div className="overflow-hidden rounded-lg border border-[#e3dac8] bg-[#fffdf8] shadow-sm">
           <div className="grid grid-cols-[1.1fr_0.8fr_0.6fr_0.45fr] gap-3 border-b border-[#eee5d3] bg-[#f1eadb] px-4 py-3 text-xs font-bold uppercase text-[#6b6253]">
-            <span>{isVietnamese ? "Chi phi" : "Cost"}</span>
-            <span>{isVietnamese ? "Nhom" : "Category"}</span>
-            <span className="text-right">{isVietnamese ? "Tong" : "Total"}</span>
+            <span>{isVietnamese ? "Chi phí" : "Cost"}</span>
+            <span>{isVietnamese ? "Nhóm" : "Category"}</span>
+            <span className="text-right">{isVietnamese ? "Tổng" : "Total"}</span>
             <span />
           </div>
           {trip.costItems.length > 0 ? (
@@ -109,7 +109,9 @@ export function CostPanel({
               <CostRow key={item.id} item={item} locale={locale} onUpdate={onUpdate} onDelete={() => onDelete(item.id)} />
             ))
           ) : (
-            <p className="px-4 py-10 text-center text-sm font-medium text-[#776f61]">{isVietnamese ? "Chua co chi phi." : "No costs yet."}</p>
+            <p className="px-4 py-10 text-center text-sm font-medium text-[#776f61]">
+              {isVietnamese ? "Chưa có chi phí." : "No costs yet."}
+            </p>
           )}
         </div>
       </div>
@@ -153,7 +155,7 @@ export function CostRow({
           className="input text-right"
         />
         <button type="submit" className="text-right text-xs font-bold text-[#315f45]">
-          {isVietnamese ? "Luu" : "Save"}
+          {isVietnamese ? "Lưu" : "Save"}
         </button>
       </form>
     );
@@ -169,10 +171,10 @@ export function CostRow({
       <span className="text-right font-bold">{formatCurrency(item.amount * item.quantity)}</span>
       <div className="flex justify-end gap-2">
         <button type="button" onClick={() => setIsEditing(true)} className="text-xs font-bold text-[#315f45]">
-          {isVietnamese ? "Sua" : "Edit"}
+          {isVietnamese ? "Sửa" : "Edit"}
         </button>
         <button type="button" onClick={onDelete} className="text-xs font-bold text-[#a63f22]">
-          {isVietnamese ? "Xoa" : "Delete"}
+          {isVietnamese ? "Xóa" : "Delete"}
         </button>
       </div>
     </div>

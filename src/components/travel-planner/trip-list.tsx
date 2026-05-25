@@ -203,7 +203,7 @@ export function TripEditPanel({
             className="input"
           />
         </Field>
-        <Field label={locale === "vi" ? "Ghi chu" : "Notes"}>
+        <Field label={locale === "vi" ? "Ghi chú" : "Notes"}>
           <textarea
             value={draft.notes}
             onChange={(event) => setDraft({ ...draft, notes: event.target.value })}
@@ -220,10 +220,10 @@ export function TripEditPanel({
       </div>
       <div className="mt-4 flex justify-end gap-2">
         <button type="button" onClick={onCancel} className="rounded-lg border border-[#cfc5b1] bg-white px-4 py-2 text-sm font-bold">
-          {locale === "vi" ? "Huy" : "Cancel"}
+          {locale === "vi" ? "Hủy" : "Cancel"}
         </button>
         <button type="submit" className="rounded-lg bg-[#17211b] px-4 py-2 text-sm font-bold text-white">
-          {locale === "vi" ? "Luu thay doi" : "Save changes"}
+          {locale === "vi" ? "Lưu thay đổi" : "Save changes"}
         </button>
       </div>
     </form>
@@ -280,10 +280,10 @@ export function AiRecommendationsPanel({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-xs font-bold uppercase text-[#756f65]">
-            {isVietnamese ? "AI gá»£i Ã½" : "AI recommendations"}
+            {isVietnamese ? "AI gợi ý" : "AI recommendations"}
           </p>
           <h3 className="mt-1 text-lg font-extrabold">
-            {isVietnamese ? "Nháº­n gá»£i Ã½ tá»‘i Æ°u lá»‹ch trÃ¬nh" : "Get trip optimization ideas"}
+            {isVietnamese ? "Nhận gợi ý tối ưu lịch trình" : "Get trip optimization ideas"}
           </h3>
         </div>
         <button
@@ -292,7 +292,7 @@ export function AiRecommendationsPanel({
           disabled={isLoading}
           className="rounded-lg bg-[#17211b] px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {isLoading ? (isVietnamese ? "Äang táº¡o..." : "Generating...") : isVietnamese ? "Táº¡o gá»£i Ã½" : "Generate"}
+          {isLoading ? (isVietnamese ? "Đang tạo..." : "Generating...") : isVietnamese ? "Tạo gợi ý" : "Generate"}
         </button>
       </div>
 
@@ -337,7 +337,7 @@ export function RecommendationCard({
       {itineraryDays.length > 0 ? (
         <div className="mt-3 border-t border-[#eee5d3] pt-3">
           <label className="mb-2 block text-xs font-bold uppercase text-[#756f65]">
-            {locale === "vi" ? "Chá»n ngÃ y" : "Select day"}
+            {locale === "vi" ? "Chọn ngày" : "Select day"}
           </label>
           <select
             value={selectedDayId}
@@ -346,7 +346,7 @@ export function RecommendationCard({
           >
             {itineraryDays.map((day) => (
               <option key={day.id} value={day.id}>
-                {day.title} â€” {formatDate(day.date)}
+                {locale === "vi" ? day.title : `Day ${day.dayNumber}`} - {formatDate(day.date)}
               </option>
             ))}
           </select>

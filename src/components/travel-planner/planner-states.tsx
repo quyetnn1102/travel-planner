@@ -19,21 +19,21 @@ export function GuestDashboardState({ locale }: { locale: Locale }) {
   return (
     <section className="rounded-lg border border-[#e3dac8] bg-[#fffdf8] p-10 text-center shadow-sm">
       <p className="text-xs font-extrabold uppercase text-[#756f65]">
-        {isVietnamese ? "Khong gian ca nhan" : "Private workspace"}
+        {isVietnamese ? "Không gian cá nhân" : "Private workspace"}
       </p>
       <h2 className="mt-2 text-2xl font-bold">
-        {isVietnamese ? "Dang nhap de luu chuyen di" : "Sign in to save your trips"}
+        {isVietnamese ? "Đăng nhập để lưu chuyến đi" : "Sign in to save your trips"}
       </h2>
       <p className="mx-auto mt-2 max-w-xl text-sm font-medium leading-6 text-[#6d675c]">
         {isVietnamese
-          ? "Ban van co the xem mau chuyen di cong khai o phia tren. Dang nhap truoc khi tao, dung AI hoac luu lich trinh ca nhan."
+          ? "Bạn vẫn có thể xem mẫu chuyến đi công khai ở phía trên. Đăng nhập trước khi tạo, dùng AI hoặc lưu lịch trình cá nhân."
           : "You can still browse public templates above. Sign in before creating, using AI, or saving a personal itinerary."}
       </p>
       <Link
         href="/signin?callbackUrl=/"
         className="mt-5 inline-flex rounded-lg bg-[#17211b] px-5 py-3 text-sm font-extrabold text-white"
       >
-        {isVietnamese ? "Dang nhap" : "Sign in"}
+        {isVietnamese ? "Đăng nhập" : "Sign in"}
       </Link>
     </section>
   );

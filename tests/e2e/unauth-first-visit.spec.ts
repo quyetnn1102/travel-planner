@@ -189,7 +189,7 @@ test("english locale translates itinerary controls", async ({ page }) => {
                 tripId: "trip_1",
                 dayNumber: 1,
                 date: "2026-06-18",
-                title: "Ngay 1",
+                title: "Ngày 1",
                 activities: [
                   {
                     id: "activity_1",
@@ -211,7 +211,7 @@ test("english locale translates itinerary controls", async ({ page }) => {
                 tripId: "trip_1",
                 dayNumber: 2,
                 date: "2026-06-19",
-                title: "Ngay 2",
+                title: "Ngày 2",
                 activities: [],
               },
             ],
@@ -224,6 +224,16 @@ test("english locale translates itinerary controls", async ({ page }) => {
   );
 
   await page.goto("/");
+
+  await expect(page.getByRole("button", { name: /Ngày 1/i })).toBeVisible();
+  await expect(page.getByText("AI gợi ý")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Tạo gợi ý" })).toBeVisible();
+  await expect(page.getByText("Chưa có hoạt động").first()).toBeVisible();
+  await expect(page.getByText("Chưa có giờ")).toBeVisible();
+  await expect(page.getByPlaceholder("Tên hoạt động").first()).toBeVisible();
+  await expect(page.getByPlaceholder("Địa điểm / khu vực").first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "Thêm" }).first()).toBeVisible();
+
   await page.getByRole("button", { name: "EN", exact: true }).click();
 
   await expect(page.getByRole("button", { name: /Day 1/i })).toBeVisible();
